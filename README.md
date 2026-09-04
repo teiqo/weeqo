@@ -1,5 +1,6 @@
 # weeqo
 
-<img width="1280" height="889" alt="image" src="https://github.com/user-attachments/assets/f999bb58-fe0d-4286-a758-c84b3c14b4ab" />
+<img width="1280" height="889" alt="image" src="https://github.com/user-attachments/assets/1618da38-b359-48e7-8003-eaa73645dfbc" />
+
 
 http://csu.noteven.dev - спер отсюда всю идею и функционал но сделал сам короче (почти) и вообще чтобы крутые пацаны не из челгу тоже могли нормально смотреть удобно расписание ну может будет дорабатываться если не отчислят..
