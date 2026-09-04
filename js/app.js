@@ -1373,11 +1373,18 @@ function bindStrip() {
     const dx = e.clientX - scrub.startX;
     const dy = e.clientY - scrub.startY;
     if (!scrub.active) {
-      const horizontal = Math.abs(dx) > 7 && Math.abs(dx) > Math.abs(dy) * 1.2;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      /* Быстрый рывок пальцем даёт крупный первый шаг сразу по обеим осям.
+         Активируем скрабинг, как только горизонталь преобладает, и отменяем
+         жест только при явно вертикальном свайпе — иначе выделение пропадало
+         при быстром старте перетаскивания на телефоне. */
+      const horizontal = absX > 6 && absX >= absY;
+      const vertical = absY > 12 && absY > absX * 1.3;
       if (horizontal) {
         if (holdTimer !== null) window.clearTimeout(holdTimer);
         activateScrub();
-      } else if (Math.abs(dy) > 7 || Math.hypot(dx, dy) > 10) {
+      } else if (vertical) {
         if (holdTimer !== null) window.clearTimeout(holdTimer);
         holdTimer = null;
         strip.classList.remove("is-pressing");

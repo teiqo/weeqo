@@ -123,7 +123,7 @@
 .date-strip:is(.is-pressing, .is-scrubbing, .is-settling, .is-hop) .date-strip-selection:before,
 .date-strip-selection.is-hop:before {
   clip-path: inset(0 round 17px) !important;
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--weekly-blue) 28%, transparent);
+  box-shadow: none !important;
   transform: translateY(0) rotateX(0) scale(1.016) !important;
 }
 
@@ -741,7 +741,7 @@ html.weekly-page #root::-webkit-scrollbar,
 :root[data-weekly-palette] .date-strip-selection.is-hop:before {
   clip-path: inset(0 round 17px) !important;
   transform: translateY(0) rotateX(0) scale(1.016) !important;
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--palette-accent-1) 28%, transparent) !important;
+  box-shadow: none !important;
 }
 
 /* Счётчик недели теперь полностью берёт цвета текущей палитры. */
