@@ -2482,3 +2482,111 @@ a.weekly-settings-row.weekly-settings-link strong {
   object-fit: cover;
   display: block;
 }
+
+/* --- профиль: аккаунт, вход TG, управление, уведомления --- */
+.weekly-profile-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+.weekly-profile-avatar {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #58c7ff, #1689ec);
+  color: #fff;
+}
+.weekly-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.weekly-profile-avatar b {
+  font-size: 17px;
+}
+.weekly-profile-account-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.weekly-profile-account-text strong {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.weekly-profile-account-text small {
+  margin-top: 2px;
+  color: var(--weekly-secondary);
+  font-size: 11px;
+}
+.weekly-profile-mini {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--weekly-fill);
+  color: var(--weekly-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.weekly-profile-manage {
+  display: flex;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  border-top: 1px solid var(--weekly-separator);
+  background: transparent;
+  color: var(--weekly-blue);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.weekly-profile-manage svg {
+  width: 16px;
+  height: 16px;
+  color: var(--weekly-tertiary);
+}
+.weekly-profile-count {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--weekly-danger);
+  color: #fff;
+  font-size: 11px;
+}
+.weekly-profile-login {
+  display: grid;
+  padding: 16px 14px;
+  justify-items: center;
+  gap: 10px;
+}
+.weekly-profile-login-widget {
+  min-height: 40px;
+}
+.weekly-profile-login small {
+  max-width: 300px;
+  color: var(--weekly-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+.weekly-profile-group .weekly-settings-row {
+  min-height: 50px;
+}

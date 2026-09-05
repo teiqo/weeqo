@@ -1858,6 +1858,61 @@ function escapeHtml(text) {
 function openProfile() {
   const backdrop = $("#profile-backdrop");
   const count = lessonCount(state.group);
+  const prefs = loadNotifPrefs();
+  const role = myRole();
+  const canReview = role === "owner" || role === "editor";
+  const pendingCount = Object.keys(pendingMap).length;
+
+  let accountBlock = "";
+  if (tgSession) {
+    const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "участник";
+    const avatarInner = tgSession.photo_url
+      ? '<img src="' + escapeHtml(String(tgSession.photo_url)) + '" alt="">'
+      : "<b>" + escapeHtml((tgDisplayName(tgSession) || "?").trim().charAt(0).toUpperCase() || "?") + "</b>";
+    accountBlock = `
+      <div class="weekly-profile-group">
+        <div class="weekly-profile-group-heading"><span>аккаунт telegram</span></div>
+        <div class="weekly-profile-account">
+          <span class="weekly-profile-avatar">${avatarInner}</span>
+          <span class="weekly-profile-account-text">
+            <strong>${escapeHtml(tgDisplayName(tgSession))}</strong>
+            <small>${roleLabel}${tgSession.username ? " · @" + escapeHtml(String(tgSession.username)) : ""}</small>
+            ${role === "user" ? "<small>мой id: " + escapeHtml(String(tgSession.id)) + " — назови его владельцу для прав редактора</small>" : ""}
+          </span>
+          <button type="button" class="weekly-profile-mini" data-act="tg-logout">выйти</button>
+        </div>
+        ${
+          canReview
+            ? `<button type="button" class="weekly-profile-manage" data-act="tg-manage"><span>заявки и редакторы</span>${pendingCount ? '<b class="weekly-profile-count">' + pendingCount + "</b>" : ""}${ICON_CHEVRON}</button>`
+            : ""
+        }
+      </div>`;
+  } else {
+    accountBlock = `
+      <div class="weekly-profile-group">
+        <div class="weekly-profile-group-heading"><span>аккаунт telegram</span></div>
+        <div class="weekly-profile-login">
+          <div class="weekly-profile-login-widget" id="profile-tg-widget"></div>
+          <small>${
+            tgConfigured()
+              ? "войди, чтобы предлагать замены и получать уведомления в telegram. кнопка работает на опубликованном сайте — домен привязан к боту"
+              : "вход через telegram не настроен"
+          }</small>
+        </div>
+      </div>`;
+  }
+
+  const npref = (key, title, hint) => `
+        <div class="weekly-settings-row">
+          <span class="weekly-settings-row-main">
+            <span class="weekly-settings-copy">
+              <strong>${title}</strong>
+              <span>${hint}</span>
+            </span>
+          </span>
+          <button class="weekly-setting-switch" type="button" data-npref="${key}" aria-pressed="${prefs[key] ? "true" : "false"}" aria-label="${title}"><span aria-hidden="true"></span></button>
+        </div>`;
+
   backdrop.innerHTML = `<div class="weekly-profile">
     <div class="weekly-profile-header">
       <button type="button" data-act="close">
@@ -1874,6 +1929,7 @@ function openProfile() {
       </div>
     </div>
     <div class="weekly-profile-content">
+      ${accountBlock}
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>учебная группа</span></div>
         <div class="weekly-profile-select">
@@ -1882,6 +1938,13 @@ function openProfile() {
         </div>
         <div class="weekly-profile-pending-schedule">${ICON_CAL}<span><strong>выбор сохраняется</strong><small>группа и настройки хранятся в этом браузере</small></span></div>
       </div>
+      <div class="weekly-profile-group">
+        <div class="weekly-profile-group-heading"><span>уведомления</span></div>
+        ${npref("swaps", "замены и отмены", "в колокольчике и в telegram")}
+        ${npref("schedule", "обновления расписания", "когда парсер присылает новое")}
+        ${npref("pending", "заявки на проверку", "для владельца и редакторов")}
+        ${npref("telegram", "дублировать в telegram", TELEGRAM_BOT_NAME ? "бот @" + TELEGRAM_BOT_NAME + " — сначала нажми у него /start" : "личные сообщения от бота")}
+      </div>
     </div>
     <div class="weekly-profile-footer">
       <button type="button" data-act="close">готово</button>
@@ -1889,6 +1952,7 @@ function openProfile() {
   </div>`;
   backdrop.hidden = false;
   state.profileOpen = true;
+  if (!tgSession && tgConfigured()) mountTelegramWidget(document.getElementById("profile-tg-widget"));
 }
 
 function closeProfile() {
@@ -1988,11 +2052,6 @@ function bindExtra() {
     render();
   });
 
-  $("#go-profile").addEventListener("click", () => {
-    closeSettings();
-    openProfile();
-  });
-
   $("#aux-view").addEventListener("click", (e) => {
     const act = e.target.closest("[data-act]");
     if (!act) return;
@@ -2007,9 +2066,21 @@ function bindExtra() {
       closeProfile();
       return;
     }
+    const sw = e.target.closest("[data-npref]");
+    if (sw) {
+      toggleNotifPref(sw.dataset.npref, sw);
+      return;
+    }
     const act = e.target.closest("[data-act]");
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
+    else if (act.dataset.act === "tg-logout") {
+      tgLogout();
+      openProfile();
+    } else if (act.dataset.act === "tg-manage") {
+      closeProfile();
+      openTgSheet();
+    }
   });
 
   $("#profile-backdrop").addEventListener("change", (e) => {
@@ -2813,6 +2884,7 @@ window.onTelegramAuth = function (payload) {
     saveTgSession();
     updateTgButton();
     renderTgSheetBody();
+    if (state.profileOpen) openProfile();
     toast("привет, " + tgDisplayName(payload) + "!");
     tgSyncRoles().then(() => {
       pullSharedSwaps();
@@ -3124,17 +3196,10 @@ async function pullSharedSwaps() {
 /* ---------- окно Telegram: вход, заявки, редакторы ---------- */
 
 function updateTgButton() {
-  /* Кнопки TG в шапке больше нет: вход живёт в настройках (строка аккаунта),
-     а шестерёнка после входа становится аватаркой. */
+  /* Вход живёт в профиле (шестерёнка → аккаунт); шестерёнка после входа
+     становится аватаркой. */
   updateSettingsAvatar();
   renderAccountRow();
-  const badge = document.getElementById("tg-badge");
-  if (badge) {
-    const count = Object.keys(pendingMap).length;
-    const canReview = myRole() === "owner" || myRole() === "editor";
-    badge.hidden = !(canReview && count > 0);
-    badge.textContent = String(count);
-  }
 }
 
 /* Аватар из Telegram вместо шестерёнки настроек. */
@@ -3172,8 +3237,8 @@ function renderAccountRow() {
     if (icon && tgSession.photo_url)
       icon.innerHTML = '<img class="weekly-account-avatar" src="' + escapeHtml(String(tgSession.photo_url)) + '" alt="">';
   } else {
-    title.textContent = "войти через Telegram";
-    if (hint) hint.textContent = tgConfigured() ? "замены уйдут редактору на проверку" : "вход не настроен";
+    title.textContent = "профиль";
+    if (hint) hint.textContent = tgConfigured() ? "группа, уведомления, вход через telegram" : "группа и уведомления";
   }
 }
 
@@ -3353,6 +3418,23 @@ function saveNotifPrefs() {
   try {
     localStorage.setItem(NOTIF_PREFS_KEY, JSON.stringify(notifPrefs));
   } catch (e) {}
+}
+
+/* Переключатель категории уведомлений в профиле. */
+function toggleNotifPref(key, el) {
+  const p = loadNotifPrefs();
+  if (key === "telegram" && !p.telegram && !tgSession) {
+    toast("сначала войди через Telegram — кнопка тут же, в профиле");
+    return;
+  }
+  p[key] = !p[key];
+  saveNotifPrefs();
+  if (el) el.setAttribute("aria-pressed", p[key] ? "true" : "false");
+  if (key === "telegram")
+    syncTgSub().then((ok) => {
+      if (p.telegram) toast(ok ? "бот пришлёт уведомления лично" : "не получилось — проверь интернет");
+    });
+  else if (p.telegram) syncTgSub();
 }
 
 /* Подписка на личные уведомления в Telegram: запись уходит в weeqo-tg-subs,
@@ -3707,8 +3789,6 @@ function manualRefresh(btn) {
 })();
 
 (function initTg() {
-  const btn = document.getElementById("tg-btn");
-  if (btn) btn.addEventListener("click", openTgSheet);
   loadTgSession();
   updateTgButton();
 })();
@@ -3724,37 +3804,8 @@ function manualRefresh(btn) {
   if (acc)
     acc.addEventListener("click", () => {
       closeSettings();
-      openTgSheet();
+      openProfile();
     });
-  const defs = [
-    ["notif-swaps-switch", "swaps"],
-    ["notif-schedule-switch", "schedule"],
-    ["notif-pending-switch", "pending"],
-    ["notif-tg-switch", "telegram"],
-  ];
-  const prefs = loadNotifPrefs();
-  defs.forEach(([id, key]) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.setAttribute("aria-pressed", prefs[key] ? "true" : "false");
-    el.addEventListener("click", () => {
-      const p = loadNotifPrefs();
-      if (key === "telegram" && !p.telegram && !tgSession) {
-        toast("сначала войди через Telegram — строка аккаунта сверху");
-        return;
-      }
-      p[key] = !p[key];
-      saveNotifPrefs();
-      el.setAttribute("aria-pressed", p[key] ? "true" : "false");
-      if (key === "telegram")
-        syncTgSub().then((ok) => {
-          if (p.telegram) toast(ok ? "бот пришлёт уведомления лично" : "не получилось — проверь интернет");
-        });
-      else if (p.telegram) syncTgSub();
-    });
-  });
-  const tgHint = document.getElementById("notif-tg-hint");
-  if (tgHint && TELEGRAM_BOT_NAME) tgHint.textContent = "бот @" + TELEGRAM_BOT_NAME + " — сначала нажми у него /start";
   renderAccountRow();
 })();
 

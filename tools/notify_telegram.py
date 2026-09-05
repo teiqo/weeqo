@@ -38,7 +38,11 @@ def log(*args):
 
 
 def read_config():
-    """Достаёт SHARED_SWAPS_URL из js/config.js, чтобы не дублировать адрес."""
+    """SHARED_SWAPS_URL: сначала из окружения (задаёт workflow),
+    потом запасной вариант — из js/config.js (локальный запуск)."""
+    env_url = os.environ.get("SHARED_SWAPS_URL", "").strip()
+    if env_url:
+        return env_url
     try:
         with open(CONFIG_JS, encoding="utf-8") as f:
             for line in f:

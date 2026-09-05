@@ -1,4 +1,4 @@
-const CACHE = "weeqo-groups-v45";
+const CACHE = "weeqo-groups-v46";
 const ASSETS = [
   "./",
   "./index.html",
