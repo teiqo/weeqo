@@ -2117,3 +2117,38 @@ html.weekly-page #root::-webkit-scrollbar,
   fill: currentColor;
   stroke: none;
 }
+
+/* Строка «стать крутым»: та же геометрия, что и у остальных строк.
+   Базовое правило размера шеврона написано как button.weekly-settings-row > svg,
+   поэтому в ссылке SVG брал дефолтные 300x150 и раздувал строку. */
+a.weekly-settings-row.weekly-settings-link {
+  min-height: 46px;
+  padding: 5px 9px;
+  gap: 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--weekly-text);
+}
+a.weekly-settings-row.weekly-settings-link > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--weekly-secondary);
+  fill: none;
+  stroke-width: 1.9;
+}
+a.weekly-settings-row.weekly-settings-link .weekly-settings-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+a.weekly-settings-row.weekly-settings-link .weekly-settings-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: none;
+}
+a.weekly-settings-row.weekly-settings-link strong {
+  font-size: 13.5px;
+  line-height: 1.18;
+}
