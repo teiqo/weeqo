@@ -2974,17 +2974,3 @@ a.weekly-settings-row.weekly-settings-link strong {
   }
 }
 
-
-/* --- полоска выбора дня: убрано overshoot-подрагивание пилюли --- */
-.date-strip.is-pressing .date-strip-selection:before {
-  transform: scale(1);
-}
-.date-strip.is-scrubbing .date-strip-selection:before,
-.date-strip.is-settling .date-strip-selection:before {
-  transform: scale(1);
-}
-:root[data-weekly-palette=neutral] .date-strip.is-pressing .date-strip-selection:before,
-:root[data-weekly-palette=neutral] .date-strip.is-scrubbing .date-strip-selection:before,
-:root[data-weekly-palette=neutral] .date-strip.is-settling .date-strip-selection:before {
-  transform: translateY(0) rotateX(0) scale(1);
-}
