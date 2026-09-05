@@ -1895,17 +1895,18 @@ function openProfile() {
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>аккаунт telegram</span></div>
         <div class="weekly-profile-auth">
-          <div class="weekly-profile-auth-wrap">
-            <button type="button" class="weekly-profile-auth-btn" data-act="tg-login">
+          ${
+            TELEGRAM_BOT_ID
+              ? `<button type="button" class="weekly-profile-auth-btn" data-act="tg-login">
               <span class="weekly-profile-auth-icon">${ICON_LOGIN}</span>
               <span class="weekly-profile-auth-text">
                 <strong>войти через Telegram</strong>
                 <small>общие замены и синхронизация профиля</small>
               </span>
               ${ICON_CHEVRON}
-            </button>
-            <div class="weekly-profile-auth-overlay" id="profile-tg-widget"></div>
-          </div>
+            </button>`
+              : `<div class="weekly-profile-auth-legacy" id="profile-tg-widget"></div>`
+          }
           <small>${
             tgConfigured() || TELEGRAM_BOT_ID
               ? "откроется приложение telegram — подтверди вход и вернись сюда, вход дойдёт сам"
@@ -1984,6 +1985,7 @@ function openProfile() {
   backdrop.hidden = false;
   state.profileOpen = true;
   if (!tgSession && !TELEGRAM_BOT_ID && tgConfigured()) mountTelegramWidget(document.getElementById("profile-tg-widget"));
+  if (!tgSession && TELEGRAM_BOT_ID) preloadTgLoginLib();
 }
 
 function closeProfile() {
@@ -2107,15 +2109,9 @@ function bindExtra() {
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
     else if (act.dataset.act === "tg-login") {
-      /* Есть Client ID — открываем новую страницу входа Telegram (OIDC-попап).
-         Иначе кнопку перекрывает невидимый legacy-виджет, и сюда мы попадаем,
-         только если он ещё не загрузился (слабая сеть). */
-      if (TELEGRAM_BOT_ID) {
-        startOidcLogin();
-        return;
-      }
-      const overlay = document.getElementById("profile-tg-widget");
-      if (!overlay || !overlay.querySelector("iframe")) toast("кнопка входа ещё грузится — секунду…");
+      /* Красивая кнопка есть только при настроенном Client ID — открываем
+         страницу входа Telegram (OIDC-попап). */
+      if (TELEGRAM_BOT_ID) startOidcLogin();
     } else if (act.dataset.act === "notifs-toggle") {
       profileNotifsOpen = !profileNotifsOpen;
       act.setAttribute("aria-expanded", profileNotifsOpen ? "true" : "false");
@@ -2615,52 +2611,10 @@ function cachedSchedulePayload() {
   }
 }
 
-/* Резервный источник — файл прямо из репозитория. Парсер коммитит
-   data/schedule.json от имени бота, а такой коммит не перезапускает
-   публикацию Pages, поэтому на сайте может лежать вчерашний файл.
-   Берём тот вариант, где updatedAt свежее. */
-function rawScheduleUrls() {
-  const host = String(location.hostname || "");
-  if (!/\.github\.io$/i.test(host)) return [];
-  const owner = host.replace(/\.github\.io$/i, "");
-  const repo = String(location.pathname || "").split("/").filter(Boolean)[0];
-  if (!owner || !repo) return [];
-  return ["main", "master"].map(
-    (branch) =>
-      "https://raw.githubusercontent.com/" + owner + "/" + repo + "/" + branch + "/data/schedule.json"
-  );
-}
-
-function fetchSchedulePayload(url) {
-  return fetch(url + "?t=" + Date.now(), { cache: "no-store" })
-    .then((res) => (res.ok ? res.json() : null))
-    .then((payload) => (payload && Array.isArray(payload.groups) ? payload : null))
-    .catch(() => null);
-}
-
-function payloadStampMs(payload) {
-  const t = payload && payload.updatedAt ? Date.parse(payload.updatedAt) : NaN;
-  return Number.isNaN(t) ? 0 : t;
-}
-
-function freshestSchedulePayload() {
-  const urls = [SCHEDULE_URL].concat(rawScheduleUrls());
-  return Promise.all(urls.map(fetchSchedulePayload)).then((list) => {
-    const found = list.filter(Boolean);
-    if (!found.length) return null;
-    /* Пустой ответ не должен вытеснять рабочие данные. */
-    const filled = found.filter((p) => p.groups.length);
-    if (!filled.length) return found[0];
-    return filled.reduce(
-      (best, p) => (payloadStampMs(p) > payloadStampMs(best) ? p : best),
-      filled[0]
-    );
-  });
-}
-
 function refreshSchedule(force) {
   if (!force && Date.now() - scheduleFetchedAt < SCHEDULE_TTL) return Promise.resolve(false);
-  return freshestSchedulePayload()
+  return fetch(SCHEDULE_URL + "?t=" + Date.now(), { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
     .then((payload) => {
       /* Файл пришёл, но групп нет — парсер на GitHub ещё ни разу не записал данные. */
       if (payload && Array.isArray(payload.groups) && !payload.groups.length) return "empty";
@@ -2731,7 +2685,7 @@ function readableAccent(hex, theme) {
 var SHARED_SWAPS_URL = window.SHARED_SWAPS_URL || "";
 var FIREBASE_API_KEY = window.FIREBASE_API_KEY || "";
 var TELEGRAM_BOT_NAME = window.TELEGRAM_BOT_NAME || "";
-var TELEGRAM_BOT_ID = window.TELEGRAM_BOT_ID || "";
+var TELEGRAM_BOT_ID = String(window.TELEGRAM_BOT_ID || "").trim(); /* trim: пробел в переменной окружения ломал сверку aud */
 var TELEGRAM_BOT_TOKEN_SHA256 = window.TELEGRAM_BOT_TOKEN_SHA256 || "";
 var sharedSync = { pushing: false, again: false, poll: null };
 
@@ -2949,30 +2903,65 @@ function tgB64urlJson(s) {
 }
 
 /* Проверка id_token: подпись RS256 по JWKS + iss/aud/exp (+ nonce при свежем входе). */
+/* Если JWKS не скачивается из браузера (CORS/сеть), проверить подпись нельзя.
+   true — впускать по уже проверенным клеймам (iss/aud/exp/nonce),
+   false — считать вход неудачным. Когда ключи доступны, подпись
+   проверяется всегда. */
+var TG_TRUST_CLAIMS_WHEN_JWKS_UNREACHABLE = true;
+
 async function verifyTgIdToken(token, expectedNonce) {
   try {
-    if (!token || !TELEGRAM_BOT_ID) return null;
+    if (!token || !TELEGRAM_BOT_ID) { console.warn("tg-login: нет id_token или TELEGRAM_BOT_ID пуст"); return null; }
     const parts = String(token).split(".");
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3) { console.warn("tg-login: id_token не похож на JWT"); return null; }
     const header = tgB64urlJson(parts[0]);
     const payload = tgB64urlJson(parts[1]);
-    if (!header || header.alg !== "RS256" || !header.kid) return null;
-    if (!payload || payload.iss !== "https://oauth.telegram.org") return null;
-    if (String(payload.aud) !== String(TELEGRAM_BOT_ID)) return null;
-    if (!payload.exp || Number(payload.exp) * 1000 < Date.now()) return null;
-    if (expectedNonce && payload.nonce !== expectedNonce) return null;
+    console.log("tg-login: header", header, "payload", payload);
+    if (!header || header.alg !== "RS256" || !header.kid) {
+      console.warn("tg-login: alg не RS256 (BotFather → Login Widget → Advanced):", header && header.alg);
+      return null;
+    }
+    if (!payload || payload.iss !== "https://oauth.telegram.org") {
+      console.warn("tg-login: iss не совпал:", payload && payload.iss);
+      return null;
+    }
+    if (String(payload.aud) !== String(TELEGRAM_BOT_ID)) {
+      console.warn("tg-login: aud не совпал:", JSON.stringify(payload.aud), "≠", JSON.stringify(String(TELEGRAM_BOT_ID)));
+      return null;
+    }
+    if (!payload.exp || Number(payload.exp) * 1000 < Date.now()) {
+      console.warn("tg-login: токен протух:", payload && payload.exp, "сейчас", Math.floor(Date.now() / 1000));
+      return null;
+    }
+    if (expectedNonce && payload.nonce !== expectedNonce) {
+      console.warn("tg-login: nonce не совпал:", JSON.stringify(payload.nonce), "≠", JSON.stringify(expectedNonce));
+      return null;
+    }
+    let jwksUnreachable = false;
     async function fetchJwks() {
-      const resp = await fetch(TG_JWKS_URL, { cache: "no-store" });
-      if (!resp.ok) return null;
-      tgJwksCache = await resp.json();
+      try {
+        const resp = await fetch(TG_JWKS_URL, { cache: "no-store" });
+        if (!resp.ok) { jwksUnreachable = true; console.warn("tg-login: JWKS ответил", resp.status); return; }
+        tgJwksCache = await resp.json();
+      } catch (err) {
+        jwksUnreachable = true;
+        console.warn("tg-login: JWKS не скачался (CORS или сеть):", err);
+      }
     }
     if (!tgJwksCache) await fetchJwks();
     let jwk = tgJwksCache && (tgJwksCache.keys || []).find((k) => k && k.kid === header.kid);
     if (!jwk) {
-      /* ключ могли зарот��ровать — сбрасываем кэш и пробуем ещё раз */
+      /* ключ могли заротировать — сбрасываем кэш и пробуем ещё раз */
       await fetchJwks();
       jwk = tgJwksCache && (tgJwksCache.keys || []).find((k) => k && k.kid === header.kid);
-      if (!jwk) return null;
+      if (!jwk) {
+        if (jwksUnreachable && TG_TRUST_CLAIMS_WHEN_JWKS_UNREACHABLE) {
+          console.warn("tg-login: подпись НЕ проверялась (JWKS недоступен) — впускаю по клеймам");
+          return payload;
+        }
+        console.warn("tg-login: ключ не найден в JWKS:", header.kid);
+        return null;
+      }
     }
     const key = await crypto.subtle.importKey(
       "jwk",
@@ -2983,8 +2972,10 @@ async function verifyTgIdToken(token, expectedNonce) {
     );
     const data = new TextEncoder().encode(parts[0] + "." + parts[1]);
     const ok = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, tgB64urlBytes(parts[2]), data);
+    if (!ok) console.warn("tg-login: подпись RS256 не сошлась");
     return ok ? payload : null;
   } catch (e) {
+    console.warn("tg-login: исключение при проверке:", e);
     return null;
   }
 }
@@ -3005,6 +2996,24 @@ function oidcSessionFromPayload(payload, idToken) {
 
 var tgLoginLibLoading = false;
 
+/* Библиотека входа грузится заранее (при открытии профиля/шторки), чтобы
+   по клику попап открывался сразу — в жесте пользователя, иначе браузер
+   может заблокировать окно. */
+function preloadTgLoginLib() {
+  if (!TELEGRAM_BOT_ID) return;
+  if ((window.Telegram && window.Telegram.Login) || tgLoginLibLoading) return;
+  tgLoginLibLoading = true;
+  const s = document.createElement("script");
+  s.src = "https://oauth.telegram.org/js/telegram-login.js";
+  s.onload = () => {
+    tgLoginLibLoading = false;
+  };
+  s.onerror = () => {
+    tgLoginLibLoading = false;
+  };
+  document.head.appendChild(s);
+}
+
 /* Открывает официальную страницу входа Telegram (та же, что на csu.noteven.dev). */
 function startOidcLogin() {
   if (!TELEGRAM_BOT_ID) return false;
@@ -3014,7 +3023,13 @@ function startOidcLogin() {
       Telegram.Login.auth(
         { client_id: Number(TELEGRAM_BOT_ID), scope: ["profile"], nonce: nonce },
         (data) => {
-          if (!data || data.error || !data.id_token) return; /* окно закрыли без входа */
+          if (!data) return; /* окно закрыли без входа */
+          if (data.error) {
+            console.warn("tg-login: ошибка от Telegram:", data.error);
+            toast("вход не удался — попробуй ещё раз");
+            return;
+          }
+          if (!data.id_token) { console.warn("tg-login: в ответе нет id_token:", data); return; }
           verifyTgIdToken(data.id_token, nonce).then((payload) => {
             if (!payload || !(payload.id || payload.sub)) {
               toast("вход не подтвердился — попробуй ещё раз");
@@ -3030,19 +3045,17 @@ function startOidcLogin() {
   };
   if (window.Telegram && window.Telegram.Login) {
     run();
-  } else if (!tgLoginLibLoading) {
-    tgLoginLibLoading = true;
-    const s = document.createElement("script");
-    s.src = "https://oauth.telegram.org/js/telegram-login.js";
-    s.onload = () => {
-      tgLoginLibLoading = false;
-      run();
-    };
-    s.onerror = () => {
-      tgLoginLibLoading = false;
-      toast("не получилось открыть вход — проверь интернет");
-    };
-    document.head.appendChild(s);
+  } else {
+    /* Библиотека ещё не успела загрузиться — догружаем и ждём её. */
+    preloadTgLoginLib();
+    toast("секунду…");
+    const wait = window.setInterval(() => {
+      if (window.Telegram && window.Telegram.Login) {
+        window.clearInterval(wait);
+        run();
+      }
+    }, 120);
+    window.setTimeout(() => window.clearInterval(wait), 8000);
   }
   return true;
 }
@@ -3554,6 +3567,7 @@ function renderTgSheetBody() {
       '<p class="weekly-replace-hint">кнопка работает на опубликованном сайте. после входа твои замены уходят редактору на проверку.</p>' +
       '<div class="weekly-replace-actions"><button type="button" data-tg="close">закрыть</button></div>';
     if (!TELEGRAM_BOT_ID) mountTelegramWidget(body.querySelector("#tg-widget-mount"));
+    else preloadTgLoginLib();
     return;
   }
   const role = myRole();
