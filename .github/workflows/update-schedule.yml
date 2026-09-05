@@ -25,11 +25,6 @@ jobs:
       - name: parse pdf into data/schedule.json
         run: python3 tools/update_schedule.py
 
-      - name: что получилось
-        run: |
-          python3 -c "import json; d=json.load(open('data/schedule.json')); print('updatedAt:', d.get('updatedAt')); print('групп:', len(d.get('groups', [])))"
-          git status --porcelain data/ || true
-
       - name: commit changes
         run: |
           if [ -n "$(git status --porcelain data/)" ]; then
@@ -38,7 +33,6 @@ jobs:
             git add data/
             git commit -m "chore: refresh schedule from sustec.ru"
             git push
-            echo "расписание обновлено и закоммичено"
           else
             echo "no changes"
           fi
