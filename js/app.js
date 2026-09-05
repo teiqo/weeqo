@@ -1844,6 +1844,8 @@ const ICON_GIFT =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18M12 8v12M8.5 8a2.5 2.5 0 1 1 3.5-2.3A2.5 2.5 0 1 1 15.5 8z"/></svg>';
 const ICON_SHIELD =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 7.7-7 9.2-4-1.5-7-4.6-7-9.2V6z"/><path d="M9.3 11.8l2 2 3.4-3.9"/></svg>';
+const ICON_LOGIN =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>';
 
 function escapeHtml(text) {
   return String(text)
@@ -1895,7 +1897,17 @@ function openProfile() {
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>аккаунт telegram</span></div>
         <div class="weekly-profile-auth">
-          <div class="weekly-profile-auth-widget" id="profile-tg-widget"></div>
+          <div class="weekly-profile-auth-wrap">
+            <button type="button" class="weekly-profile-auth-btn" data-act="tg-login">
+              <span class="weekly-profile-auth-icon">${ICON_LOGIN}</span>
+              <span class="weekly-profile-auth-text">
+                <strong>войти через Telegram</strong>
+                <small>общие замены и синхронизация профиля</small>
+              </span>
+              ${ICON_CHEVRON}
+            </button>
+            <div class="weekly-profile-auth-overlay" id="profile-tg-widget"></div>
+          </div>
           <small>${
             tgConfigured()
               ? "на телефоне откроется приложение telegram — подтверди вход и вернись сюда, вход дойдёт сам"
@@ -2115,7 +2127,13 @@ function bindExtra() {
     const act = e.target.closest("[data-act]");
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
-    else if (act.dataset.act === "notifs-toggle") {
+    else if (act.dataset.act === "tg-login") {
+      /* Красивую кнопку перекрывает невидимый официальный виджет — клик уходит
+         в него и открывается страница входа Telegram. Сюда попадаем, только
+         если виджет ещё не загрузился (слабая сеть). */
+      const overlay = document.getElementById("profile-tg-widget");
+      if (!overlay || !overlay.querySelector("iframe")) toast("кнопка входа ещё грузится — секунду…");
+    } else if (act.dataset.act === "notifs-toggle") {
       profileNotifsOpen = !profileNotifsOpen;
       act.setAttribute("aria-expanded", profileNotifsOpen ? "true" : "false");
       const panel = document.querySelector(".weekly-profile-notifs-panel");

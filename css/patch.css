@@ -2764,13 +2764,82 @@ a.weekly-settings-row.weekly-settings-link strong {
   justify-items: center;
   gap: 10px;
 }
-.weekly-profile-auth-widget {
-  min-height: 40px;
+.weekly-profile-auth-wrap {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 16px;
 }
-.weekly-profile-auth-widget iframe {
-  display: block;
-  border-radius: 12px;
-  box-shadow: 0 8px 22px color-mix(in srgb, #2aabee 34%, transparent);
+.weekly-profile-auth-btn {
+  display: flex;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 14px 8px 10px;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid color-mix(in srgb, var(--weekly-blue) 24%, var(--weekly-separator));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--weekly-blue) 10%, var(--weekly-raised));
+  color: var(--weekly-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s ease, transform 0.11s ease;
+}
+.weekly-profile-auth-btn:active {
+  background: color-mix(in srgb, var(--weekly-blue) 15%, var(--weekly-raised));
+  transform: scale(0.985);
+}
+.weekly-profile-auth-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(180deg, #7f7aff, #5a5af0);
+  color: #fff;
+}
+.weekly-profile-auth-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.weekly-profile-auth-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.weekly-profile-auth-text strong {
+  font-size: 14.5px;
+}
+.weekly-profile-auth-text small {
+  margin-top: 2px;
+  color: var(--weekly-secondary);
+  font-size: 11px;
+}
+.weekly-profile-auth-btn > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--weekly-tertiary);
+}
+.weekly-profile-auth-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.weekly-profile-auth-overlay iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0.01;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(2);
 }
 .weekly-profile-auth small {
   max-width: 300px;
