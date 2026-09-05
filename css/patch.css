@@ -2735,6 +2735,12 @@ a.weekly-settings-row.weekly-settings-link strong {
   justify-items: stretch;
   gap: 10px;
 }
+.weekly-profile-auth-wrap {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+}
 .weekly-profile-auth-btn {
   display: flex;
   width: 100%;
@@ -2789,15 +2795,22 @@ a.weekly-settings-row.weekly-settings-link strong {
   flex: 0 0 auto;
   color: var(--weekly-tertiary);
 }
-.weekly-profile-auth-legacy {
-  display: grid;
-  min-height: 40px;
-  justify-items: center;
+.weekly-profile-auth-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
-.weekly-profile-auth-legacy iframe {
-  display: block;
-  border-radius: 12px;
-  box-shadow: 0 8px 22px color-mix(in srgb, #2aabee 34%, transparent);
+.weekly-profile-auth-overlay iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0.01;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(2);
 }
 .weekly-profile-auth small {
   max-width: none;

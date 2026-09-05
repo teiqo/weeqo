@@ -1895,18 +1895,17 @@ function openProfile() {
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>аккаунт telegram</span></div>
         <div class="weekly-profile-auth">
-          ${
-            TELEGRAM_BOT_ID
-              ? `<button type="button" class="weekly-profile-auth-btn" data-act="tg-login">
+          <div class="weekly-profile-auth-wrap">
+            <button type="button" class="weekly-profile-auth-btn" data-act="tg-login">
               <span class="weekly-profile-auth-icon">${ICON_LOGIN}</span>
               <span class="weekly-profile-auth-text">
                 <strong>войти через Telegram</strong>
                 <small>общие замены и синхронизация профиля</small>
               </span>
               ${ICON_CHEVRON}
-            </button>`
-              : `<div class="weekly-profile-auth-legacy" id="profile-tg-widget"></div>`
-          }
+            </button>
+            <div class="weekly-profile-auth-overlay" id="profile-tg-widget"></div>
+          </div>
           <small>${
             tgConfigured() || TELEGRAM_BOT_ID
               ? "откроется приложение telegram — подтверди вход и вернись сюда, вход дойдёт сам"
@@ -1985,7 +1984,6 @@ function openProfile() {
   backdrop.hidden = false;
   state.profileOpen = true;
   if (!tgSession && !TELEGRAM_BOT_ID && tgConfigured()) mountTelegramWidget(document.getElementById("profile-tg-widget"));
-  if (!tgSession && TELEGRAM_BOT_ID) preloadTgLoginLib();
 }
 
 function closeProfile() {
@@ -2109,9 +2107,15 @@ function bindExtra() {
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
     else if (act.dataset.act === "tg-login") {
-      /* Красивая кнопка есть только при настроенном Client ID — открываем
-         страницу входа Telegram (OIDC-попап). */
-      if (TELEGRAM_BOT_ID) startOidcLogin();
+      /* Есть Client ID — открываем новую страницу входа Telegram (OIDC-попап).
+         Иначе кнопку перекрывает невидимый legacy-виджет, и сюда мы попадаем,
+         только если он ещё не загрузился (слабая сеть). */
+      if (TELEGRAM_BOT_ID) {
+        startOidcLogin();
+        return;
+      }
+      const overlay = document.getElementById("profile-tg-widget");
+      if (!overlay || !overlay.querySelector("iframe")) toast("кнопка входа ещё грузится — секунду…");
     } else if (act.dataset.act === "notifs-toggle") {
       profileNotifsOpen = !profileNotifsOpen;
       act.setAttribute("aria-expanded", profileNotifsOpen ? "true" : "false");
@@ -2611,10 +2615,52 @@ function cachedSchedulePayload() {
   }
 }
 
+/* Резервный источник — файл прямо из репозитория. Парсер коммитит
+   data/schedule.json от имени бота, а такой коммит не перезапускает
+   публикацию Pages, поэтому на сайте может лежать вчерашний файл.
+   Берём тот вариант, где updatedAt свежее. */
+function rawScheduleUrls() {
+  const host = String(location.hostname || "");
+  if (!/\.github\.io$/i.test(host)) return [];
+  const owner = host.replace(/\.github\.io$/i, "");
+  const repo = String(location.pathname || "").split("/").filter(Boolean)[0];
+  if (!owner || !repo) return [];
+  return ["main", "master"].map(
+    (branch) =>
+      "https://raw.githubusercontent.com/" + owner + "/" + repo + "/" + branch + "/data/schedule.json"
+  );
+}
+
+function fetchSchedulePayload(url) {
+  return fetch(url + "?t=" + Date.now(), { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((payload) => (payload && Array.isArray(payload.groups) ? payload : null))
+    .catch(() => null);
+}
+
+function payloadStampMs(payload) {
+  const t = payload && payload.updatedAt ? Date.parse(payload.updatedAt) : NaN;
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function freshestSchedulePayload() {
+  const urls = [SCHEDULE_URL].concat(rawScheduleUrls());
+  return Promise.all(urls.map(fetchSchedulePayload)).then((list) => {
+    const found = list.filter(Boolean);
+    if (!found.length) return null;
+    /* Пустой ответ не должен вытеснять рабочие данные. */
+    const filled = found.filter((p) => p.groups.length);
+    if (!filled.length) return found[0];
+    return filled.reduce(
+      (best, p) => (payloadStampMs(p) > payloadStampMs(best) ? p : best),
+      filled[0]
+    );
+  });
+}
+
 function refreshSchedule(force) {
   if (!force && Date.now() - scheduleFetchedAt < SCHEDULE_TTL) return Promise.resolve(false);
-  return fetch(SCHEDULE_URL + "?t=" + Date.now(), { cache: "no-store" })
-    .then((res) => (res.ok ? res.json() : null))
+  return freshestSchedulePayload()
     .then((payload) => {
       /* Файл пришёл, но групп нет — парсер на GitHub ещё ни разу не записал данные. */
       if (payload && Array.isArray(payload.groups) && !payload.groups.length) return "empty";
@@ -2959,24 +3005,6 @@ function oidcSessionFromPayload(payload, idToken) {
 
 var tgLoginLibLoading = false;
 
-/* Библиотека входа грузится заранее (при открытии профиля/шторки), чтобы
-   по клику попап открывался сразу — в жесте пользователя, иначе браузер
-   может заблокировать окно. */
-function preloadTgLoginLib() {
-  if (!TELEGRAM_BOT_ID) return;
-  if ((window.Telegram && window.Telegram.Login) || tgLoginLibLoading) return;
-  tgLoginLibLoading = true;
-  const s = document.createElement("script");
-  s.src = "https://oauth.telegram.org/js/telegram-login.js";
-  s.onload = () => {
-    tgLoginLibLoading = false;
-  };
-  s.onerror = () => {
-    tgLoginLibLoading = false;
-  };
-  document.head.appendChild(s);
-}
-
 /* Открывает официальную страницу входа Telegram (та же, что на csu.noteven.dev). */
 function startOidcLogin() {
   if (!TELEGRAM_BOT_ID) return false;
@@ -2986,12 +3014,7 @@ function startOidcLogin() {
       Telegram.Login.auth(
         { client_id: Number(TELEGRAM_BOT_ID), scope: ["profile"], nonce: nonce },
         (data) => {
-          if (!data) return; /* окно закрыли без входа */
-          if (data.error) {
-            toast("вход не удался — попробуй ещё раз");
-            return;
-          }
-          if (!data.id_token) return;
+          if (!data || data.error || !data.id_token) return; /* окно закрыли без входа */
           verifyTgIdToken(data.id_token, nonce).then((payload) => {
             if (!payload || !(payload.id || payload.sub)) {
               toast("вход не подтвердился — попробуй ещё раз");
@@ -3007,17 +3030,19 @@ function startOidcLogin() {
   };
   if (window.Telegram && window.Telegram.Login) {
     run();
-  } else {
-    /* Библиотека ещё не успела загрузиться — догружаем и ждём её. */
-    preloadTgLoginLib();
-    toast("секунду…");
-    const wait = window.setInterval(() => {
-      if (window.Telegram && window.Telegram.Login) {
-        window.clearInterval(wait);
-        run();
-      }
-    }, 120);
-    window.setTimeout(() => window.clearInterval(wait), 8000);
+  } else if (!tgLoginLibLoading) {
+    tgLoginLibLoading = true;
+    const s = document.createElement("script");
+    s.src = "https://oauth.telegram.org/js/telegram-login.js";
+    s.onload = () => {
+      tgLoginLibLoading = false;
+      run();
+    };
+    s.onerror = () => {
+      tgLoginLibLoading = false;
+      toast("не получилось открыть вход — проверь интернет");
+    };
+    document.head.appendChild(s);
   }
   return true;
 }
@@ -3529,7 +3554,6 @@ function renderTgSheetBody() {
       '<p class="weekly-replace-hint">кнопка работает на опубликованном сайте. после входа твои замены уходят редактору на проверку.</p>' +
       '<div class="weekly-replace-actions"><button type="button" data-tg="close">закрыть</button></div>';
     if (!TELEGRAM_BOT_ID) mountTelegramWidget(body.querySelector("#tg-widget-mount"));
-    else preloadTgLoginLib();
     return;
   }
   const role = myRole();

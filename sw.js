@@ -1,4 +1,4 @@
-const CACHE = "weeqo-groups-v48";
+const CACHE = "weeqo-groups-v49";
 const ASSETS = [
   "./",
   "./index.html",
@@ -42,7 +42,11 @@ self.addEventListener("fetch", (event) => {
     event.request.url.indexOf("data/changelog.json") !== -1 ||
     event.request.url.indexOf("js/config.js") !== -1
   ) {
-    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        caches.match(event.request).then((r) => r || new Response(null, { status: 503 }))
+      )
+    );
     return;
   }
   /* Облако с заменами, auth-токены и виджет Telegram не кешируем.
