@@ -31,6 +31,7 @@
           var tint = theme === "light" ? "#F5F5F7" : "#000000";
           if (data.palette === "accent" && accent) {
             root.dataset.weeklyPalette = "accent";
+            root.style.setProperty("--weekly-accent", accent);
             tint = mix(accent, theme === "light" ? "#ffffff" : "#05050a", theme === "light" ? 0.2 : 0.18);
           }
           var meta = document.querySelector('meta[name="theme-color"]');
@@ -103,7 +104,7 @@
             </button>
 
             <h1>
-              <span class="weekly-header-brand is-playing" id="brand">
+              <span class="weekly-header-brand" id="brand">
                 <span class="weekly-header-mark">
                   <svg class="weeqo-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.937A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
                 </span>

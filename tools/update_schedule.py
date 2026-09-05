@@ -529,6 +529,25 @@ def load_old():
     return None
 
 
+def touch_checked_at():
+    """Штамп «проверено сейчас» в уже существующем файле —
+    сайт показывает время последней проверки, даже если разбор бедный."""
+    try:
+        if not os.path.exists(OUT):
+            return
+        with open(OUT, encoding="utf-8") as fh:
+            payload = json.load(fh)
+        if not isinstance(payload, dict):
+            return
+        payload["checkedAt"] = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+        with open(OUT, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=1, sort_keys=False)
+            fh.write("\n")
+        print("checkedAt обновлён (контент без изменений)")
+    except Exception as exc:
+        print("checkedAt не записался: %s" % exc, file=sys.stderr)
+
+
 def main():
     if len(sys.argv) > 1:
         pdf = sys.argv[1]  # локальный файл для проверки
@@ -551,6 +570,7 @@ def main():
     if len(parsed) < 5:
         # разбор подозрительно бедный — файл не трогаем, но и не падаем
         print("разбор слишком бедный: групп %d — оставляем старый файл" % len(parsed), file=sys.stderr)
+        touch_checked_at()
         return 0
 
     old = load_old()
@@ -582,6 +602,7 @@ def main():
                 "итог хуже старого файла: было %d пар, стало %d — оставляем старый" % (old_total, total),
                 file=sys.stderr,
             )
+            touch_checked_at()
             return 0
         print("групп: %d, обновлено из PDF: %d, пар: %d" % (len(out_groups), replaced, total))
         groups = sorted(out_groups, key=lambda g: g["name"].lower())
@@ -590,6 +611,7 @@ def main():
         total = sum(day_count(g["days"]) for g in groups)
         if total < 30:
             print("разбор слишком бедный: занятий %d — оставляем старый файл" % total, file=sys.stderr)
+            touch_checked_at()
             return 0
 
     old_groups_list = (old or {}).get("groups") or []

@@ -2906,3 +2906,85 @@ a.weekly-settings-row.weekly-settings-link strong {
 .agenda-list .agenda-break {
   margin: 6px 0;
 }
+
+
+/* --- лоадер: фон и иконка следуют теме/акценту ещё до загрузки app.js --- */
+#loader.app-loading-state {
+  background: var(--weekly-bg, #f5f5f7);
+}
+#loader .app-loading-mark-blur,
+#loader .app-loading-mark-surface {
+  background: var(--weekly-accent, #6578f6);
+}
+
+/* --- кольцо аватарки следует акцентному цвету темы --- */
+.weekly-settings-trigger.is-avatar,
+.weekly-settings.is-open .weekly-settings-trigger.is-avatar {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--weekly-raised), var(--weekly-raised)) padding-box,
+    linear-gradient(150deg, var(--weekly-accent, #a55bff), var(--weekly-accent-readable, var(--weekly-accent, #2e9bff))) border-box;
+}
+
+/* --- глоу-лучи за лого в шапке --- */
+.weekly-title-row h1 {
+  position: relative;
+  isolation: isolate;
+}
+.weekly-title-row h1::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 230px;
+  height: 230px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--weekly-blue) 34%, transparent) 0%, transparent 52%),
+    conic-gradient(
+      from 0deg,
+      transparent 10deg,
+      color-mix(in srgb, var(--weekly-blue) 32%, transparent) 38deg,
+      transparent 66deg,
+      color-mix(in srgb, #b884ff 28%, transparent) 120deg,
+      transparent 152deg,
+      color-mix(in srgb, #59d98c 24%, transparent) 210deg,
+      transparent 242deg,
+      color-mix(in srgb, var(--weekly-blue) 22%, transparent) 304deg,
+      transparent 338deg
+    );
+  filter: blur(24px);
+  opacity: 0.85;
+  animation: weekly-logo-rays 34s linear infinite;
+  pointer-events: none;
+}
+:root[data-theme="light"] .weekly-title-row h1::before {
+  opacity: 0.5;
+}
+@keyframes weekly-logo-rays {
+  to {
+    transform: translate(-50%, -50%) rotate(1turn);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .weekly-title-row h1::before {
+    animation: none;
+  }
+}
+
+
+/* --- полоска выбора дня: убрано overshoot-подрагивание пилюли --- */
+.date-strip.is-pressing .date-strip-selection:before {
+  transform: scale(1);
+}
+.date-strip.is-scrubbing .date-strip-selection:before,
+.date-strip.is-settling .date-strip-selection:before {
+  transform: scale(1);
+}
+:root[data-weekly-palette=neutral] .date-strip.is-pressing .date-strip-selection:before,
+:root[data-weekly-palette=neutral] .date-strip.is-scrubbing .date-strip-selection:before,
+:root[data-weekly-palette=neutral] .date-strip.is-settling .date-strip-selection:before {
+  transform: translateY(0) rotateX(0) scale(1);
+}

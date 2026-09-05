@@ -74,7 +74,8 @@ const state = {
   settingsOpen: false,
   nowOverride: null,
   light: false,
-  scope: "week",
+  /* На телефоне по умолчанию только выбранный день; «вся неделя» — тумблером. */
+  scope: (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 740px)").matches) ? "day" : "week",
   group: DEFAULT_GROUP,
   draftGroup: DEFAULT_GROUP,
   onboarded: false,
@@ -1368,10 +1369,9 @@ function settleScrub() {
   }
   scrub.pointerDown = false;
   scrub.target = scrub.targetIndex * scrub.step;
-  /* На телефоне быстрый флик оставляет огромную скорость, из-за которой
-     пружина проскакивает цель и линия сильно подпрыгивает. Гасим импульс
-     при отпускании, чтобы овершут был маленьким и аккуратным. */
-  scrub.velocity = Math.max(-480, Math.min(480, scrub.velocity * 0.35));
+  /* Овершут убран: импульс при отпускании гасим полностью —
+     пилюля дотягивается до выбранного дня без подпрыгивания. */
+  scrub.velocity = 0;
   scrub.strip.classList.remove("is-scrubbing");
   scrub.strip.classList.add("is-settling");
   const scene = $("#scene");
@@ -2065,6 +2065,7 @@ function closeOnboarding() {
     host.hidden = true;
     host.classList.remove("is-closing");
     host.innerHTML = "";
+    playBrandIntro(); /* главный экран появился — теперь интро лого */
   }, 320);
   state.onboarded = true;
   save();
@@ -2083,6 +2084,7 @@ function bindExtra() {
   $("#scope-switch").addEventListener("click", () => {
     state.scope = state.scope === "week" ? "day" : "week";
     applyFlags();
+    save(); /* запоминаем выбор */
     render();
   });
 
@@ -2180,6 +2182,16 @@ function hideLoader() {
   window.setTimeout(() => loader.remove(), 320);
 }
 
+/* Интро-анимация лого — запускаем только когда главный экран виден. */
+function playBrandIntro() {
+  const brand = $("#brand");
+  if (!brand) return;
+  brand.classList.remove("is-playing");
+  void brand.offsetWidth; /* перезапуск CSS-анимации */
+  brand.classList.add("is-playing");
+  window.setTimeout(() => brand.classList.remove("is-playing"), 4200);
+}
+
 function init() {
   load();
   applyQuery();
@@ -2200,8 +2212,8 @@ function init() {
   $("#app").hidden = false;
   hideLoader();
 
-  const brand = $("#brand");
-  window.setTimeout(() => brand.classList.remove("is-playing"), 4200);
+  /* При первом входе экран закрыт онбордингом — интро сыграет в closeOnboarding(). */
+  if (state.onboarded) playBrandIntro();
 
   if (state.settingsOpen) {
     state.settingsOpen = false;
@@ -2688,6 +2700,10 @@ var FIREBASE_API_KEY = window.FIREBASE_API_KEY || "";
 var TELEGRAM_BOT_NAME = window.TELEGRAM_BOT_NAME || "";
 var TELEGRAM_BOT_ID = String(window.TELEGRAM_BOT_ID || "").trim(); /* trim: пробел в переменной окружения ломал сверку aud */
 var TELEGRAM_BOT_TOKEN_SHA256 = window.TELEGRAM_BOT_TOKEN_SHA256 || "";
+/* Жёсткое назначение ролей через переменные окружения (без облака):
+   TELEGRAM_OWNER_ID — один telegram id владельца, TELEGRAM_ADMIN_IDS — id редакторов через запятую. */
+var TELEGRAM_OWNER_ID = String(window.TELEGRAM_OWNER_ID || "").trim();
+var TELEGRAM_ADMIN_IDS = String(window.TELEGRAM_ADMIN_IDS || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
 var sharedSync = { pushing: false, again: false, poll: null };
 
 /* ---------- анонимный вход Firebase ----------
@@ -2873,7 +2889,9 @@ async function verifyTgAuth(payload) {
     if (!payload || !payload.id || !payload.hash || !payload.auth_date) return false;
     /* OIDC-сессия (вход через telegram-login.js): вместо HMAC проверяем
        подпись JWT по публичным ключам Telegram (JWKS). */
-    if (payload.hash === "oidc") return Boolean(await verifyTgIdToken(payload.id_token));
+    /* id_token живёт час, сессия — 30 дней: при перепроверке сохранённой
+       сессии проверяем подпись и клеймы, но не срок жизни токена. */
+    if (payload.hash === "oidc") return Boolean(await verifyTgIdToken(payload.id_token, null, true));
     const keys = Object.keys(payload)
       .filter((k) => k !== "hash" && payload[k] !== undefined && payload[k] !== null && payload[k] !== "")
       .sort();
@@ -2910,7 +2928,7 @@ function tgB64urlJson(s) {
    проверяется всегда. */
 var TG_TRUST_CLAIMS_WHEN_JWKS_UNREACHABLE = true;
 
-async function verifyTgIdToken(token, expectedNonce) {
+async function verifyTgIdToken(token, expectedNonce, allowExpired) {
   try {
     if (!token || !TELEGRAM_BOT_ID) { console.warn("tg-login: нет id_token или TELEGRAM_BOT_ID пуст"); return null; }
     const parts = String(token).split(".");
@@ -2930,7 +2948,7 @@ async function verifyTgIdToken(token, expectedNonce) {
       console.warn("tg-login: aud не совпал:", JSON.stringify(payload.aud), "≠", JSON.stringify(String(TELEGRAM_BOT_ID)));
       return null;
     }
-    if (!payload.exp || Number(payload.exp) * 1000 < Date.now()) {
+    if (!allowExpired && (!payload.exp || Number(payload.exp) * 1000 < Date.now())) {
       console.warn("tg-login: токен протух:", payload && payload.exp, "сейчас", Math.floor(Date.now() / 1000));
       return null;
     }
@@ -3114,6 +3132,7 @@ function loadTgSession() {
     /* Фоново перепроверяем подпись — мало ли, кто-то правил localStorage. */
     verifyTgAuth(data).then((ok) => {
       if (!ok) tgLogout();
+      else tgSyncRoles(); /* роли самовосстанавливаются при перезагрузке */
     });
   } catch (e) {
     /* приватный режим */
@@ -3156,8 +3175,11 @@ window.onTelegramAuth = function (payload) {
 
 function myRole() {
   if (!tgSession) return "anon";
-  const tg = tgRoles.boundTg || String(tgSession.id);
-  if (tgRoles.owner && tgRoles.owner === tg) return "owner";
+  const tg = String(tgRoles.boundTg || tgSession.id);
+  /* Роль из конфига (variables) сильнее облачной — работает даже при пустой базе. */
+  if (TELEGRAM_OWNER_ID && tg === TELEGRAM_OWNER_ID) return "owner";
+  if (TELEGRAM_ADMIN_IDS.indexOf(tg) !== -1) return "editor";
+  if (tgRoles.owner && String(tgRoles.owner) === tg) return "owner";
   if (tgRoles.editors && tgRoles.editors[tg]) return "editor";
   return "user";
 }
@@ -3170,7 +3192,7 @@ function swapPrimaryLabel() {
 }
 
 function swapAccessHint() {
-  if (!tgConfigured() || !sharedSwapsEnabled()) return "";
+  if (!sharedSwapsEnabled()) return "";
   const role = myRole();
   if (role === "anon") {
     return '<p class="weekly-replace-hint">сохранится только на этом устройстве. войди через Telegram (шестерёнка → аккаунт) — замена уйдёт редактору на проверку и станет общей</p>';
@@ -3187,11 +3209,21 @@ async function tgRegister() {
   if (tgRegisterState === "done" || tgRegisterState === "pending") return;
   tgRegisterState = "pending";
   try {
-    const token = await ensureFbToken();
-    if (!token || !fbAuth.uid) throw new Error("нет firebase-сессии");
+    const fbOn = firebaseAuthEnabled();
+    if (fbOn) {
+      const token = await ensureFbToken();
+      if (!token || !fbAuth.uid) {
+        console.warn("tg-roles: нет firebase-сессии — проверь FIREBASE_API_KEY и что в Firebase включён Anonymous (Authentication → Sign-in method)");
+        throw new Error("нет firebase-сессии");
+      }
+    } else {
+      console.warn("tg-roles: firebase auth не настроен — роли пишутся без токена");
+    }
     const mine = String(tgSession.id);
-    const regUrl = await sharedUrlWithAuth(cloudRoot() + "/weeqo-users/" + fbAuth.uid + ".json");
+    const deviceKey = fbAuth.uid || "tg-" + mine;
+    const regUrl = await sharedUrlWithAuth(cloudRoot() + "/weeqo-users/" + deviceKey + ".json");
     const regResp = await fetch(regUrl, { headers: { Accept: "application/json" }, cache: "no-store" });
+    if (!regResp.ok) console.warn("tg-roles: чтение привязки отклонено базой:", regResp.status);
     const bound = regResp.ok ? await regResp.json() : null;
     if (bound === null) {
       const put = await fetch(regUrl, {
@@ -3199,7 +3231,10 @@ async function tgRegister() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(mine),
       });
-      if (!put.ok) throw new Error("регистрация отклонена: " + put.status);
+      if (!put.ok) {
+        console.warn("tg-roles: регистрация отклонена базой:", put.status, "— опубликуй правила из firebase-rules.json в Firebase Console");
+        throw new Error("регистрация отклонена: " + put.status);
+      }
       tgRoles.boundTg = mine;
     } else {
       /* На этом устройстве уже входили в другой Telegram — права по старой привязке. */
@@ -3207,14 +3242,21 @@ async function tgRegister() {
     }
     const ownerUrl = await sharedUrlWithAuth(cloudRoot() + "/weeqo-meta/owner.json");
     const ownerResp = await fetch(ownerUrl, { headers: { Accept: "application/json" }, cache: "no-store" });
+    if (!ownerResp.ok) console.warn("tg-roles: чтение owner отклонено базой:", ownerResp.status);
     const owner = ownerResp.ok ? await ownerResp.json() : null;
     if (owner === null) {
       /* Правила пропускают только самую первую запись — гонка не страшна. */
-      await fetch(ownerUrl, {
+      const claim = await fetch(ownerUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tgRoles.boundTg),
       });
+      if (claim.ok) console.log("tg-roles: место владельца было свободно — теперь это ты");
+      else console.warn("tg-roles: база отклонила запись владельца:", claim.status);
+    } else if (String(owner) === String(tgRoles.boundTg)) {
+      console.log("tg-roles: владелец — это ты");
+    } else {
+      console.warn("tg-roles: владелец уже занят другим id. Если это ошибка — удали узел weeqo-meta/owner в Firebase Console и перезагрузи страницу первым");
     }
     tgRegisterState = "done";
   } catch (e) {
@@ -3224,7 +3266,10 @@ async function tgRegister() {
 }
 
 async function tgSyncRoles() {
-  if (!tgSession || !tgConfigured()) return;
+  /* Роли живут в облаке (SHARED_SWAPS_URL), а не в конфиге виджета. Раньше тут
+     стоял tgConfigured(), и при OIDC-входе синк молча пропускался —
+     владелец не назначался никому. */
+  if (!tgSession || !sharedSwapsEnabled()) return;
   try {
     await tgRegister();
     const root = cloudRoot();
@@ -3233,11 +3278,12 @@ async function tgSyncRoles() {
       fetch(await sharedUrlWithAuth(root + "/weeqo-editors.json"), { headers: { Accept: "application/json" }, cache: "no-store" }),
     ]);
     if (ownerResp.ok) tgRoles.owner = await ownerResp.json();
+    else console.warn("tg-roles: не смог прочитать владельца:", ownerResp.status);
     const editors = editorsResp.ok ? await editorsResp.json() : null;
     tgRoles.editors = editors && typeof editors === "object" ? editors : {};
     updateTgButton();
   } catch (e) {
-    /* офлайн — роли останутся от прошлого тика */
+    console.warn("tg-roles: синк ролей не удался (офлайн или база отклонила):", e);
   }
 }
 
@@ -3319,7 +3365,7 @@ async function proposeSwapEntry(key, entry) {
 
 /* Куда уходит замена после сохранения — зависит от роли. */
 function publishSwapKey(key) {
-  if (!sharedSwapsEnabled() || !tgConfigured()) return;
+  if (!sharedSwapsEnabled()) return;
   const entry = loadSwaps()[key];
   if (!entry) return;
   const role = myRole();
@@ -3474,7 +3520,7 @@ async function pullSharedSwaps() {
   } catch (e) {
     /* офлайн — повторим в следующий тик */
   }
-  if (tgConfigured() && tgSession) {
+  if (tgSession && sharedSwapsEnabled()) {
     await tgSyncRoles();
     if (myRole() === "owner" || myRole() === "editor") pullPending();
   }
@@ -3787,7 +3833,7 @@ function closeTgMemo() {
    а рассылает бот через GitHub Action (tools/notify_telegram.py). Перед
    включением человек жмёт /start у бота — иначе TG не даёт написать первым. */
 async function syncTgSub() {
-  if (!tgSession || !sharedSwapsEnabled() || !tgConfigured()) return false;
+  if (!tgSession || !sharedSwapsEnabled()) return false;
   const prefs = loadNotifPrefs();
   const path = "weeqo-tg-subs/" + tgSession.id;
   if (!prefs.telegram) return cloudWrite(path, null);
