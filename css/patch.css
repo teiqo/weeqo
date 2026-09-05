@@ -2557,13 +2557,33 @@ a.weekly-settings-row.weekly-settings-link strong {
   margin-top: 12px;
 }
 
-/* --- профиль: подсказка на вкладке уведомлений --- */
-.weekly-profile-notifs-hint {
-  margin: 0 6px;
+/* --- профиль: вкладки «профиль / уведомления» --- */
+.weekly-profile-tabs {
+  display: flex;
+  margin: 10px 20px 12px;
+  padding: 3px;
+  gap: 3px;
+  border-radius: 12px;
+  background: var(--weekly-fill);
+}
+.weekly-profile-tabs button {
+  min-height: 32px;
+  padding: 0 10px;
+  flex: 1;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
   color: var(--weekly-secondary);
-  font-size: 11px;
-  line-height: 1.4;
-  text-align: center;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+.weekly-profile-tabs button.is-active {
+  background: var(--weekly-raised);
+  box-shadow: 0 2px 8px #0000001f;
+  color: var(--weekly-text);
 }
 
 /* --- памятка про /start боту --- */
@@ -2738,21 +2758,49 @@ a.weekly-settings-row.weekly-settings-link strong {
   color: #fff;
   font-size: 11px;
 }
-.weekly-profile-login {
+.weekly-profile-auth {
   display: grid;
-  padding: 16px 14px;
+  padding: 18px 14px;
   justify-items: center;
   gap: 10px;
 }
-.weekly-profile-login-widget {
+.weekly-profile-auth-widget {
   min-height: 40px;
 }
-.weekly-profile-login small {
+.weekly-profile-auth-widget iframe {
+  display: block;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px color-mix(in srgb, #2aabee 34%, transparent);
+}
+.weekly-profile-auth small {
   max-width: 300px;
   color: var(--weekly-secondary);
   font-size: 11px;
   line-height: 1.4;
   text-align: center;
+}
+
+/* --- профиль: раскрывающийся список тумблеров --- */
+.weekly-profile-notifs-head > svg {
+  transition: transform 0.22s ease;
+}
+.weekly-profile-notifs-head[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.weekly-profile-notifs-head[aria-expanded="true"] {
+  border-bottom: 1px solid var(--weekly-separator);
+}
+.weekly-profile-notifs-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.weekly-profile-notifs-panel.is-open {
+  grid-template-rows: 1fr;
+}
+.weekly-profile-notifs-panel-inner {
+  min-height: 0;
+  overflow: hidden;
 }
 .weekly-profile-group .weekly-settings-row {
   min-height: 50px;

@@ -1855,7 +1855,10 @@ function escapeHtml(text) {
 
 /* ---------- профиль ---------- */
 
+/* Вкладка внутри профиля: "main" — аккаунт и группа, "notifs" — тумблеры уведомлений. */
 var profileTab = "main";
+/* Список тумблеров на вкладке уведомлений раскрыт по умолчанию. */
+var profileNotifsOpen = true;
 
 function openProfile() {
   const backdrop = $("#profile-backdrop");
@@ -1891,11 +1894,11 @@ function openProfile() {
     accountBlock = `
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>аккаунт telegram</span></div>
-        <div class="weekly-profile-login">
-          <div class="weekly-profile-login-widget" id="profile-tg-widget"></div>
+        <div class="weekly-profile-auth">
+          <div class="weekly-profile-auth-widget" id="profile-tg-widget"></div>
           <small>${
             tgConfigured()
-              ? "войди, чтобы предлагать замены и получать уведомления в telegram. кнопка работает на опубликованном сайте — домен привязан к боту"
+              ? "на телефоне откроется приложение telegram — подтверди вход и вернись сюда, вход дойдёт сам"
               : "вход через telegram не настроен"
           }</small>
         </div>
@@ -1913,6 +1916,8 @@ function openProfile() {
           <button class="weekly-setting-switch" type="button" data-npref="${key}" aria-pressed="${prefs[key] ? "true" : "false"}" aria-label="${title}"><span aria-hidden="true"></span></button>
         </div>`;
 
+  const isNotifs = profileTab === "notifs";
+
   const mainContent = `
       ${accountBlock}
       <div class="weekly-profile-group">
@@ -1921,53 +1926,56 @@ function openProfile() {
           <select id="profile-group">${groupOptions(state.group)}</select>
           ${ICON_CHEVRON}
         </div>
-      </div>
+      </div>`;
+
+  const notifsContent = `
       <div class="weekly-profile-group">
-        <button class="weekly-settings-row" type="button" data-act="notifs-tab">
+        <button class="weekly-settings-row weekly-profile-notifs-head" type="button" data-act="notifs-toggle" aria-expanded="${profileNotifsOpen ? "true" : "false"}">
           <span class="weekly-settings-row-main">
             <span class="weekly-settings-icon is-theme">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
             </span>
             <span class="weekly-settings-copy">
-              <strong>уведомления</strong>
-              <span>колокольчик и telegram-бот</span>
+              <strong>настроить уведомления</strong>
+              <span>что показывать и куда дублировать</span>
             </span>
           </span>
           ${ICON_CHEVRON}
         </button>
+        <div class="weekly-profile-notifs-panel${profileNotifsOpen ? " is-open" : ""}">
+          <div class="weekly-profile-notifs-panel-inner">
+            ${npref("swaps", "замены и отмены", "в колокольчике и в telegram")}
+            ${npref("schedule", "обновления расписания", "когда парсер присылает новое")}
+            ${npref("pending", "заявки на проверку", "для владельца и редакторов")}
+            ${npref("telegram", "дублировать в telegram", TELEGRAM_BOT_NAME ? "бот @" + TELEGRAM_BOT_NAME + " — сначала нажми у него /start" : "личные сообщения от бота")}
+          </div>
+        </div>
       </div>`;
 
-  const notifsContent = `
-      <div class="weekly-profile-group">
-        <div class="weekly-profile-group-heading"><span>уведомления</span></div>
-        ${npref("swaps", "замены и отмены", "в колокольчике и в telegram")}
-        ${npref("schedule", "обновления расписания", "когда парсер присылает новое")}
-        ${npref("pending", "заявки на проверку", "для владельца и редакторов")}
-        ${npref("telegram", "дублировать в telegram", TELEGRAM_BOT_NAME ? "бот @" + TELEGRAM_BOT_NAME : "личные сообщения от бота")}
-      </div>
-      <p class="weekly-profile-notifs-hint">бот напишет тебе только после твоего /start — телеграм не даёт ему писать первым</p>`;
-
-  const isNotifs = profileTab === "notifs";
   backdrop.innerHTML = `<div class="weekly-profile">
     <div class="weekly-profile-header">
-      <button type="button" data-act="back">
+      <button type="button" data-act="close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
         назад
       </button>
-      <h1>${isNotifs ? "уведомления" : "профиль"}</h1>
+      <h1>профиль</h1>
       <span></span>
     </div>
+    ${heroBlock}
     ${
       isNotifs
         ? ""
-        : heroBlock +
-          `<div class="weekly-profile-identity">
+        : `<div class="weekly-profile-identity">
       <div>
         <h2>${groupName()}</h2>
         <p>${count} ${plural(count, "пара", "пары", "пар")} в неделю</p>
       </div>
     </div>`
     }
+    <div class="weekly-profile-tabs" role="tablist">
+      <button type="button" data-ptab="main" role="tab" aria-selected="${isNotifs ? "false" : "true"}" class="${isNotifs ? "" : "is-active"}">профиль</button>
+      <button type="button" data-ptab="notifs" role="tab" aria-selected="${isNotifs ? "true" : "false"}" class="${isNotifs ? "is-active" : ""}">уведомления</button>
+    </div>
     <div class="weekly-profile-content">
       ${isNotifs ? notifsContent : mainContent}
     </div>
@@ -2098,17 +2106,20 @@ function bindExtra() {
       toggleNotifPref(sw.dataset.npref, sw);
       return;
     }
+    const ptab = e.target.closest("[data-ptab]");
+    if (ptab) {
+      profileTab = ptab.dataset.ptab === "notifs" ? "notifs" : "main";
+      openProfile();
+      return;
+    }
     const act = e.target.closest("[data-act]");
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
-    else if (act.dataset.act === "back") {
-      if (profileTab === "notifs") {
-        profileTab = "main";
-        openProfile();
-      } else closeProfile();
-    } else if (act.dataset.act === "notifs-tab") {
-      profileTab = "notifs";
-      openProfile();
+    else if (act.dataset.act === "notifs-toggle") {
+      profileNotifsOpen = !profileNotifsOpen;
+      act.setAttribute("aria-expanded", profileNotifsOpen ? "true" : "false");
+      const panel = document.querySelector(".weekly-profile-notifs-panel");
+      if (panel) panel.classList.toggle("is-open", profileNotifsOpen);
     } else if (act.dataset.act === "tg-logout") {
       tgLogout();
       openProfile();
@@ -2881,6 +2892,47 @@ function saveTgSession() {
   }
 }
 
+/* Вход через приложение Telegram: после подтверждения виджет возвращает
+   на data-auth-url с параметрами (?id=...&hash=...) — завершаем вход здесь. */
+function checkTgAuthRedirect() {
+  try {
+    let raw = window.location.search;
+    if (raw.indexOf("id=") === -1 && window.location.hash.indexOf("id=") !== -1)
+      raw = "?" + window.location.hash.replace(/^#/, "");
+    if (raw.indexOf("id=") === -1) return;
+    const q = new URLSearchParams(raw);
+    if (!q.get("id") || !q.get("hash") || !q.get("auth_date")) return;
+    const payload = {};
+    ["id", "first_name", "last_name", "username", "photo_url", "auth_date", "hash"].forEach((k) => {
+      const v = q.get(k);
+      if (v !== null && v !== "") payload[k] = v;
+    });
+    payload.id = Number(payload.id);
+    payload.auth_date = Number(payload.auth_date);
+    verifyTgAuth(payload).then((ok) => {
+      /* Чистим адресную строку в любом случае, чтобы параметры не висели в URL. */
+      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+      if (!ok) {
+        toast("вход не подтвердился — попробуй ещё раз");
+        return;
+      }
+      if (tgSession && String(tgSession.id) === String(payload.id)) return; /* уже вошли */
+      tgSession = payload;
+      tgRegisterState = "idle";
+      saveTgSession();
+      updateTgButton();
+      if (state.profileOpen) openProfile();
+      toast("привет, " + tgDisplayName(payload) + "!");
+      tgSyncRoles().then(() => {
+        pullSharedSwaps();
+        if (loadNotifPrefs().telegram) syncTgSub();
+      });
+    });
+  } catch (e) {
+    /* кривые параметры — игнорируем */
+  }
+}
+
 function loadTgSession() {
   try {
     const raw = localStorage.getItem(TG_SESSION_KEY);
@@ -3285,6 +3337,9 @@ function mountTelegramWidget(container) {
   script.setAttribute("data-telegram-login", TELEGRAM_BOT_NAME);
   script.setAttribute("data-size", "large");
   script.setAttribute("data-onauth", "onTelegramAuth");
+  /* Возврат из приложения Telegram: виджет редиректит на страницу с параметрами
+     входа (?id=...&hash=...), их при загрузке ловит checkTgAuthRedirect(). */
+  script.setAttribute("data-auth-url", window.location.origin + window.location.pathname);
   script.async = true;
   container.appendChild(script);
 }
@@ -3869,6 +3924,7 @@ function manualRefresh(btn) {
 
 (function initTg() {
   loadTgSession();
+  checkTgAuthRedirect();
   updateTgButton();
 })();
 
