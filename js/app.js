@@ -1857,9 +1857,7 @@ function escapeHtml(text) {
 
 /* ---------- профиль ---------- */
 
-/* Вкладка внутри профиля: "main" — аккаунт и группа, "notifs" — тумблеры уведомлений. */
-var profileTab = "main";
-/* Список тумблеров на вкладке уведомлений раскрыт по умолчанию. */
+/* Список тумблеров уведомлений в профиле раскрыт по умолчанию. */
 var profileNotifsOpen = true;
 
 function openProfile() {
@@ -1897,20 +1895,21 @@ function openProfile() {
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>аккаунт telegram</span></div>
         <div class="weekly-profile-auth">
-          <div class="weekly-profile-auth-wrap">
-            <button type="button" class="weekly-profile-auth-btn" data-act="tg-login">
+          ${
+            TELEGRAM_BOT_ID
+              ? `<button type="button" class="weekly-profile-auth-btn" data-act="tg-login">
               <span class="weekly-profile-auth-icon">${ICON_LOGIN}</span>
               <span class="weekly-profile-auth-text">
                 <strong>войти через Telegram</strong>
                 <small>общие замены и синхронизация профиля</small>
               </span>
               ${ICON_CHEVRON}
-            </button>
-            <div class="weekly-profile-auth-overlay" id="profile-tg-widget"></div>
-          </div>
+            </button>`
+              : `<div class="weekly-profile-auth-legacy" id="profile-tg-widget"></div>`
+          }
           <small>${
             tgConfigured() || TELEGRAM_BOT_ID
-              ? "на телефоне откроется приложение telegram — подтверди вход и вернись сюда, вход дойдёт сам"
+              ? "откроется приложение telegram — подтверди вход и вернись сюда, вход дойдёт сам"
               : "вход через telegram не настроен"
           }</small>
         </div>
@@ -1928,9 +1927,7 @@ function openProfile() {
           <button class="weekly-setting-switch" type="button" data-npref="${key}" aria-pressed="${prefs[key] ? "true" : "false"}" aria-label="${title}"><span aria-hidden="true"></span></button>
         </div>`;
 
-  const isNotifs = profileTab === "notifs";
-
-  const mainContent = `
+  const content = `
       ${accountBlock}
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>учебная группа</span></div>
@@ -1938,9 +1935,7 @@ function openProfile() {
           <select id="profile-group">${groupOptions(state.group)}</select>
           ${ICON_CHEVRON}
         </div>
-      </div>`;
-
-  const notifsContent = `
+      </div>
       <div class="weekly-profile-group">
         <button class="weekly-settings-row weekly-profile-notifs-head" type="button" data-act="notifs-toggle" aria-expanded="${profileNotifsOpen ? "true" : "false"}">
           <span class="weekly-settings-row-main">
@@ -1974,22 +1969,14 @@ function openProfile() {
       <span></span>
     </div>
     ${heroBlock}
-    ${
-      isNotifs
-        ? ""
-        : `<div class="weekly-profile-identity">
+    <div class="weekly-profile-identity">
       <div>
         <h2>${groupName()}</h2>
         <p>${count} ${plural(count, "пара", "пары", "пар")} в неделю</p>
       </div>
-    </div>`
-    }
-    <div class="weekly-profile-tabs" role="tablist">
-      <button type="button" data-ptab="main" role="tab" aria-selected="${isNotifs ? "false" : "true"}" class="${isNotifs ? "" : "is-active"}">профиль</button>
-      <button type="button" data-ptab="notifs" role="tab" aria-selected="${isNotifs ? "true" : "false"}" class="${isNotifs ? "is-active" : ""}">уведомления</button>
     </div>
     <div class="weekly-profile-content">
-      ${isNotifs ? notifsContent : mainContent}
+      ${content}
     </div>
     <div class="weekly-profile-footer">
       <button type="button" data-act="close">готово</button>
@@ -1998,6 +1985,7 @@ function openProfile() {
   backdrop.hidden = false;
   state.profileOpen = true;
   if (!tgSession && !TELEGRAM_BOT_ID && tgConfigured()) mountTelegramWidget(document.getElementById("profile-tg-widget"));
+  if (!tgSession && TELEGRAM_BOT_ID) preloadTgLoginLib();
 }
 
 function closeProfile() {
@@ -2005,7 +1993,6 @@ function closeProfile() {
   backdrop.hidden = true;
   backdrop.innerHTML = "";
   state.profileOpen = false;
-  profileTab = "main";
   closeTgMemo();
 }
 
@@ -2118,25 +2105,13 @@ function bindExtra() {
       toggleNotifPref(sw.dataset.npref, sw);
       return;
     }
-    const ptab = e.target.closest("[data-ptab]");
-    if (ptab) {
-      profileTab = ptab.dataset.ptab === "notifs" ? "notifs" : "main";
-      openProfile();
-      return;
-    }
     const act = e.target.closest("[data-act]");
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
     else if (act.dataset.act === "tg-login") {
-      /* Есть Client ID — открываем новую страницу входа Telegram (OIDC-попап).
-         Иначе кнопку перекрывает невидимый legacy-виджет, и сюда мы попадаем,
-         только если он ещё не загрузился (слабая сеть). */
-      if (TELEGRAM_BOT_ID) {
-        startOidcLogin();
-        return;
-      }
-      const overlay = document.getElementById("profile-tg-widget");
-      if (!overlay || !overlay.querySelector("iframe")) toast("кнопка входа ещё грузится — секунду…");
+      /* Красивая кнопка есть только при настроенном Client ID — открываем
+         страницу входа Telegram (OIDC-попап). */
+      if (TELEGRAM_BOT_ID) startOidcLogin();
     } else if (act.dataset.act === "notifs-toggle") {
       profileNotifsOpen = !profileNotifsOpen;
       act.setAttribute("aria-expanded", profileNotifsOpen ? "true" : "false");
@@ -2948,7 +2923,7 @@ async function verifyTgIdToken(token, expectedNonce) {
     if (!tgJwksCache) await fetchJwks();
     let jwk = tgJwksCache && (tgJwksCache.keys || []).find((k) => k && k.kid === header.kid);
     if (!jwk) {
-      /* ключ могли заротировать — сбрасываем кэш и пробуем ещё раз */
+      /* ключ могли зарот��ровать — сбрасываем кэш и пробуем ещё раз */
       await fetchJwks();
       jwk = tgJwksCache && (tgJwksCache.keys || []).find((k) => k && k.kid === header.kid);
       if (!jwk) return null;
@@ -2984,6 +2959,24 @@ function oidcSessionFromPayload(payload, idToken) {
 
 var tgLoginLibLoading = false;
 
+/* Библиотека входа грузится заранее (при открытии профиля/шторки), чтобы
+   по клику попап открывался сразу — в жесте пользователя, иначе браузер
+   может заблокировать окно. */
+function preloadTgLoginLib() {
+  if (!TELEGRAM_BOT_ID) return;
+  if ((window.Telegram && window.Telegram.Login) || tgLoginLibLoading) return;
+  tgLoginLibLoading = true;
+  const s = document.createElement("script");
+  s.src = "https://oauth.telegram.org/js/telegram-login.js";
+  s.onload = () => {
+    tgLoginLibLoading = false;
+  };
+  s.onerror = () => {
+    tgLoginLibLoading = false;
+  };
+  document.head.appendChild(s);
+}
+
 /* Открывает официальную страницу входа Telegram (та же, что на csu.noteven.dev). */
 function startOidcLogin() {
   if (!TELEGRAM_BOT_ID) return false;
@@ -2993,7 +2986,12 @@ function startOidcLogin() {
       Telegram.Login.auth(
         { client_id: Number(TELEGRAM_BOT_ID), scope: ["profile"], nonce: nonce },
         (data) => {
-          if (!data || data.error || !data.id_token) return; /* окно закрыли без входа */
+          if (!data) return; /* окно закрыли без входа */
+          if (data.error) {
+            toast("вход не удался — попробуй ещё раз");
+            return;
+          }
+          if (!data.id_token) return;
           verifyTgIdToken(data.id_token, nonce).then((payload) => {
             if (!payload || !(payload.id || payload.sub)) {
               toast("вход не подтвердился — попробуй ещё раз");
@@ -3009,19 +3007,17 @@ function startOidcLogin() {
   };
   if (window.Telegram && window.Telegram.Login) {
     run();
-  } else if (!tgLoginLibLoading) {
-    tgLoginLibLoading = true;
-    const s = document.createElement("script");
-    s.src = "https://oauth.telegram.org/js/telegram-login.js";
-    s.onload = () => {
-      tgLoginLibLoading = false;
-      run();
-    };
-    s.onerror = () => {
-      tgLoginLibLoading = false;
-      toast("не получилось открыть вход — проверь интернет");
-    };
-    document.head.appendChild(s);
+  } else {
+    /* Библиотека ещё не успела загрузиться — догружаем и ждём её. */
+    preloadTgLoginLib();
+    toast("секунду…");
+    const wait = window.setInterval(() => {
+      if (window.Telegram && window.Telegram.Login) {
+        window.clearInterval(wait);
+        run();
+      }
+    }, 120);
+    window.setTimeout(() => window.clearInterval(wait), 8000);
   }
   return true;
 }
@@ -3533,6 +3529,7 @@ function renderTgSheetBody() {
       '<p class="weekly-replace-hint">кнопка работает на опубликованном сайте. после входа твои замены уходят редактору на проверку.</p>' +
       '<div class="weekly-replace-actions"><button type="button" data-tg="close">закрыть</button></div>';
     if (!TELEGRAM_BOT_ID) mountTelegramWidget(body.querySelector("#tg-widget-mount"));
+    else preloadTgLoginLib();
     return;
   }
   const role = myRole();
@@ -3946,10 +3943,18 @@ function fmtStamp(isoValue) {
   return d.toLocaleString("ru", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/* true, пока идёт ручное обновление — штамп у чётности показывает «обновляем…». */
+var dataRefreshing = false;
+
 function renderDataStamp() {
   const el = $("#data-stamp");
   if (!el) return;
   const offline = typeof navigator !== "undefined" && !navigator.onLine;
+  if (dataRefreshing) {
+    el.textContent = "обновляем…";
+    el.hidden = false;
+    return;
+  }
   const when = scheduleUpdatedAt ? fmtStamp(scheduleUpdatedAt) : "";
   if (!when) {
     /* Данных ещё нет: показываем, что приложение их ищет (или «офлайн»). */
@@ -4041,6 +4046,9 @@ function manualRefresh(btn) {
   btn.disabled = true;
   const icon = btn.querySelector(".weekly-settings-icon svg") || btn.querySelector("svg");
   if (icon) icon.classList.add("is-spinning");
+  /* Штамп у чётности на время обновления показывает «обновляем…». */
+  dataRefreshing = true;
+  renderDataStamp();
   /* Замены тянем параллельно, у них своя защита от ошибок сети. */
   Promise.resolve(pullSharedSwaps()).catch(() => {});
   refreshSchedule(true)
@@ -4054,6 +4062,9 @@ function manualRefresh(btn) {
       refreshInFlight = false;
       btn.disabled = false;
       if (icon) icon.classList.remove("is-spinning");
+      /* Возвращаем штампу свежее время данных. */
+      dataRefreshing = false;
+      renderDataStamp();
     });
 }
 

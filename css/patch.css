@@ -938,7 +938,7 @@ html.weekly-page #root::-webkit-scrollbar,
   --week-odd-color: #d85b33; --week-even-color: #6758bd; color-scheme: light;
 }
 
-/* Конфетная: розовый, голубой, сиреневый и мята. */
+/* Конфетная: розовый, голуб��й, сиреневый и мята. */
 :root[data-theme="dark"][data-weekly-palette="candy"] {
   --weekly-bg: #1a101d; --weekly-surface: #291a2e; --weekly-raised: #37223e;
   --weekly-text: #fff0fa; --weekly-secondary: #c4a3c3; --weekly-tertiary: #a789a8;
@@ -2557,35 +2557,6 @@ a.weekly-settings-row.weekly-settings-link strong {
   margin-top: 12px;
 }
 
-/* --- профиль: вкладки «профиль / уведомления» --- */
-.weekly-profile-tabs {
-  display: flex;
-  margin: 10px 20px 12px;
-  padding: 3px;
-  gap: 3px;
-  border-radius: 12px;
-  background: var(--weekly-fill);
-}
-.weekly-profile-tabs button {
-  min-height: 32px;
-  padding: 0 10px;
-  flex: 1;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--weekly-secondary);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease;
-}
-.weekly-profile-tabs button.is-active {
-  background: var(--weekly-raised);
-  box-shadow: 0 2px 8px #0000001f;
-  color: var(--weekly-text);
-}
-
 /* --- памятка про /start боту --- */
 .weekly-tg-memo-backdrop {
   position: fixed;
@@ -2761,14 +2732,8 @@ a.weekly-settings-row.weekly-settings-link strong {
 .weekly-profile-auth {
   display: grid;
   padding: 18px 14px;
-  justify-items: center;
+  justify-items: stretch;
   gap: 10px;
-}
-.weekly-profile-auth-wrap {
-  position: relative;
-  width: 100%;
-  overflow: hidden;
-  border-radius: 16px;
 }
 .weekly-profile-auth-btn {
   display: flex;
@@ -2824,29 +2789,22 @@ a.weekly-settings-row.weekly-settings-link strong {
   flex: 0 0 auto;
   color: var(--weekly-tertiary);
 }
-.weekly-profile-auth-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.weekly-profile-auth-legacy {
+  display: grid;
+  min-height: 40px;
+  justify-items: center;
 }
-.weekly-profile-auth-overlay iframe {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  opacity: 0.01;
-  cursor: pointer;
-  pointer-events: auto;
-  transform: translate(-50%, -50%) scale(2);
+.weekly-profile-auth-legacy iframe {
+  display: block;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px color-mix(in srgb, #2aabee 34%, transparent);
 }
 .weekly-profile-auth small {
-  max-width: 300px;
+  max-width: none;
   color: var(--weekly-secondary);
   font-size: 11px;
   line-height: 1.4;
-  text-align: center;
+  text-align: left;
 }
 
 /* --- профиль: раскрывающийся список тумблеров --- */
