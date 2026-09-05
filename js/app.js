@@ -955,7 +955,7 @@ function applyTheme() {
       tint =
         state.theme === "light"
           ? mixHex(state.accent, "#ffffff", 0.2)
-          : mixHex(state.accent, "#05050a", 0.26);
+          : mixHex(state.accent, "#05050a", 0.18);
     }
     meta.setAttribute("content", tint);
   }
@@ -2385,7 +2385,7 @@ document.addEventListener("keydown", (e) => {
    data/schedule.json пересобирает GitHub Action каждые 30 минут из PDF
    на sustec.ru, а приложение с тем же шагом его перечитывает. */
 var SCHEDULE_URL = "data/schedule.json";
-var SCHEDULE_CACHE_KEY = "weekly:schedule-cache:v1";
+var SCHEDULE_CACHE_KEY = "weekly:schedule-cache:v2";
 var SCHEDULE_TTL = 30 * 60 * 1000;
 var scheduleFetchedAt = 0;
 var scheduleApply = null;

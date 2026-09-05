@@ -3,8 +3,14 @@
 
 Запуск: python3 tools/update_schedule.py
 Требует pdftotext (пакет poppler-utils).
-Скрипт ничего не перезапишет, если разбор вышел подозрительно бедным:
-тогда он выйдет с кодом 1 и старый JSON останется на месте.
+
+Защита от плохого разбора:
+- каждая пара проходит проверку на "склейку колонок" PDF (мусор выбрасывается);
+- группа из нового разбора замещает старую только если количество пар
+  правдоподобно (не сильно меньше и не сильно больше прежнего);
+- группы, которые не удалось разобрать, остаются из старого файла;
+- если итог в целом хуже старого файла — файл не трогаем, выход с кодом 1
+  (workflow упадёт и НЕ закоммитит мусор).
 """
 import datetime
 import json
@@ -37,6 +43,13 @@ NOISE = (
     "Четная неделя",
     "Нечетная неделя",
 )
+
+# Слова вида "310" или "104а" посреди названия предмета — это номер аудитории,
+# прилепившийся из соседней колонки PDF. В настоящих названиях предметов
+# такого не бывает (шифры вида 01.01 с точкой под проверку не попадают).
+MID_ROOM_RE = re.compile(r"^\d{2,3}[а-я]?$")
+MAX_SUBJECT_LEN = 56
+MAX_SUBJECT_WORDS = 6
 
 
 def fetch_pdf(path):
@@ -108,6 +121,27 @@ def clean_cell(text):
     return out
 
 
+def slot_sane(item):
+    """Отбраковывает мусорные пары, получившиеся из склейки колонок PDF."""
+    try:
+        n, subject = item[0], item[1]
+    except (TypeError, IndexError):
+        return False
+    if not isinstance(n, int) or not 1 <= n <= 6:
+        return False
+    if not isinstance(subject, str):
+        return False
+    if not 3 <= len(subject) <= MAX_SUBJECT_LEN:
+        return False
+    words = subject.split()
+    if len(words) > MAX_SUBJECT_WORDS:
+        return False
+    for word in words[:-1]:
+        if MID_ROOM_RE.match(word):
+            return False
+    return True
+
+
 def parse_page(page):
     """Одна страница -> {group_code: {day_id: [[n, subject, teacher, room, extra], ...]}}"""
     lines = page.split("\n")
@@ -162,6 +196,21 @@ def parse_page(page):
     return result
 
 
+def day_count(days):
+    return sum(len(items) for items in days.values())
+
+
+def load_old():
+    try:
+        with open(OUT, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict) and isinstance(data.get("groups"), list):
+            return data
+    except Exception:
+        pass
+    return None
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="sched-")
     pdf = os.path.join(tmp, "schedule.pdf")
@@ -175,11 +224,10 @@ def main():
             for day_id, items in days.items():
                 slot.setdefault(day_id, [])
                 for item in items:
-                    if item not in slot[day_id]:
+                    if item not in slot[day_id] and slot_sane(item):
                         slot[day_id].append(item)
 
-    groups = []
-    total = 0
+    parsed = {}
     for code in sorted(merged, key=lambda c: c.lower()):
         days = {}
         for day_id in sorted(merged[code]):
@@ -188,12 +236,51 @@ def main():
             items = sorted(merged[code][day_id], key=lambda it: it[0])
             if items:
                 days[str(day_id)] = items
-                total += len(items)
-        groups.append({"id": code.lower(), "name": code, "days": days})
+        if days:
+            parsed[code.lower()] = {"id": code.lower(), "name": code, "days": days}
 
-    if len(groups) < 5 or total < 30:
-        print("разбор слишком бедный: групп %d, занятий %d" % (len(groups), total), file=sys.stderr)
+    if len(parsed) < 5:
+        print("разбор слишком бедный: групп %d" % len(parsed), file=sys.stderr)
         return 1
+
+    old = load_old()
+    if old:
+        old_groups = {str(g.get("id", "")).lower(): g for g in old["groups"] if isinstance(g, dict)}
+        old_total = sum(day_count(g.get("days") or {}) for g in old_groups.values())
+        out_groups = []
+        replaced = 0
+        for gid, old_g in old_groups.items():
+            new_g = parsed.get(gid)
+            old_count = day_count(old_g.get("days") or {})
+            new_count = day_count(new_g["days"]) if new_g else 0
+            # Заменяем группу только если новый разбор правдоподобен:
+            # не меньше 40%% и не больше 250%% от прежнего числа пар.
+            if new_g and old_count and 0.4 * old_count <= new_count <= 2.5 * old_count:
+                out_groups.append(new_g)
+                replaced += 1
+            elif new_g and not old_count and new_count >= 4:
+                out_groups.append(new_g)
+                replaced += 1
+            else:
+                out_groups.append(old_g)
+        for gid, new_g in parsed.items():
+            if gid not in old_groups and day_count(new_g["days"]) >= 4:
+                out_groups.append(new_g)
+        total = sum(day_count(g["days"]) for g in out_groups)
+        if old_total and total < 0.6 * old_total:
+            print(
+                "итог хуже старого файла: было %d пар, стало %d — отказ" % (old_total, total),
+                file=sys.stderr,
+            )
+            return 1
+        print("групп: %d, обновлено из PDF: %d, пар: %d" % (len(out_groups), replaced, total))
+        groups = sorted(out_groups, key=lambda g: g["name"].lower())
+    else:
+        groups = sorted(parsed.values(), key=lambda g: g["name"].lower())
+        total = sum(day_count(g["days"]) for g in groups)
+        if total < 30:
+            print("разбор слишком бедный: занятий %d" % total, file=sys.stderr)
+            return 1
 
     payload = {
         "updatedAt": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),

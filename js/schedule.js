@@ -116,6 +116,18 @@ export function lessonCount(id) {
 }
 
 /* Расписание с сайта колледжа: data/schedule.json замещает встроенные группы. */
+
+/* Номер аудитории посреди названия = склейка колонок PDF, такую пару отбрасываем. */
+function saneSubject(subject) {
+  if (subject.length < 3 || subject.length > 56) return false;
+  const words = subject.split(/\s+/);
+  if (words.length > 6) return false;
+  for (let i = 0; i < words.length - 1; i += 1) {
+    if (/^\d{2,3}[а-я]?$/.test(words[i])) return false;
+  }
+  return true;
+}
+
 function rawFromRemote(days) {
   const raw = {};
   Object.keys(days || {}).forEach((key) => {
@@ -128,7 +140,7 @@ function rawFromRemote(days) {
       const n = Number(it[0]);
       if (!n || n < 1 || n > 6) return;
       const subject = String(it[1] || "").trim();
-      if (!subject) return;
+      if (!subject || !saneSubject(subject)) return;
       const extra = it[4] && typeof it[4] === "object" ? it[4] : {};
       list.push([n, subject, it[2] || "", it[3] || "", extra]);
     });
@@ -158,7 +170,10 @@ export function applyRemoteGroups(payload) {
     };
     const local = builtIn.get(id);
     /* Если разбор PDF для группы пустой, оставляем проверенные данные сборки. */
-    next.push(local && !lessonsIn(group) && lessonsIn(local) ? local : group);
+    const remoteLessons = lessonsIn(group);
+    const localLessons = local ? lessonsIn(local) : 0;
+    /* Пустой или подозрительно обрезанный разбор PDF не применяем: остаёмся на данных сборки. */
+    next.push(local && localLessons && remoteLessons * 2 < localLessons ? local : group);
   });
   GROUPS.forEach((group) => {
     if (!seen.has(group.id)) next.push(group);

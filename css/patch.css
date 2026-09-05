@@ -2010,12 +2010,12 @@ html.weekly-page #root::-webkit-scrollbar,
    Базовые палитры объявлены как :root[data-theme="dark"][data-weekly-palette] (0-3-0),
    поэтому переменные акцента тоже должны иметь три атрибута, иначе они проигрывают. */
 :root[data-theme="dark"][data-weekly-palette="accent"] {
-  --weekly-bg: color-mix(in srgb, var(--weekly-accent, #0a84ff) 40%, #05050a);
-  --weekly-surface: color-mix(in srgb, var(--weekly-accent, #0a84ff) 18%, #04040a);
-  --weekly-raised: color-mix(in srgb, var(--weekly-accent, #0a84ff) 24%, #08080f);
-  --weekly-note: color-mix(in srgb, var(--weekly-accent, #0a84ff) 22%, #08080f);
-  --weekly-fill: color-mix(in srgb, var(--weekly-accent, #0a84ff) 24%, rgba(255, 255, 255, 0.07));
-  --weekly-separator: color-mix(in srgb, var(--weekly-accent, #0a84ff) 40%, rgba(255, 255, 255, 0.14));
+  --weekly-bg: color-mix(in srgb, var(--weekly-accent, #0a84ff) 18%, #05050a);
+  --weekly-surface: color-mix(in srgb, var(--weekly-accent, #0a84ff) 10%, #04040a);
+  --weekly-raised: color-mix(in srgb, var(--weekly-accent, #0a84ff) 14%, #08080f);
+  --weekly-note: color-mix(in srgb, var(--weekly-accent, #0a84ff) 12%, #08080f);
+  --weekly-fill: color-mix(in srgb, var(--weekly-accent, #0a84ff) 16%, rgba(255, 255, 255, 0.07));
+  --weekly-separator: color-mix(in srgb, var(--weekly-accent, #0a84ff) 30%, rgba(255, 255, 255, 0.14));
   --weekly-blue: var(--weekly-accent-readable, var(--weekly-accent, #0a84ff));
   --weekly-live: var(--weekly-accent-readable, var(--weekly-accent, #0a84ff));
   --weekly-live-fill: var(--weekly-accent-readable, var(--weekly-accent, #0a84ff));
@@ -2044,16 +2044,16 @@ html.weekly-page #root::-webkit-scrollbar,
 :root[data-theme="dark"][data-weekly-palette="accent"] .agenda-list,
 :root[data-theme="dark"][data-weekly-palette="accent"] .live-lesson-card:not(.is-current) {
   border-color: var(--weekly-separator) !important;
-  background: color-mix(in srgb, var(--weekly-accent, #0a84ff) 15%, #030308) !important;
+  background: color-mix(in srgb, var(--weekly-accent, #0a84ff) 9%, #030307) !important;
 }
 :root[data-theme="dark"][data-weekly-palette="accent"] .agenda-list.is-completed {
-  background: color-mix(in srgb, var(--weekly-accent, #0a84ff) 8%, #020206) !important;
+  background: color-mix(in srgb, var(--weekly-accent, #0a84ff) 5%, #020206) !important;
 }
 :root[data-theme="dark"][data-weekly-palette="accent"] .live-card-glass {
-  background: color-mix(in srgb, var(--weekly-accent, #0a84ff) 20%, #05050c) !important;
+  background: color-mix(in srgb, var(--weekly-accent, #0a84ff) 13%, #05050c) !important;
 }
 :root[data-theme="dark"][data-weekly-palette="accent"] .bells-grid .agenda-row.is-bell-break {
-  background: color-mix(in srgb, var(--weekly-accent, #0a84ff) 14%, rgba(16, 16, 22, 0.92)) !important;
+  background: color-mix(in srgb, var(--weekly-accent, #0a84ff) 10%, rgba(16, 16, 22, 0.92)) !important;
 }
 
 :root[data-theme="light"][data-weekly-palette="accent"] .agenda-list,
