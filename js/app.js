@@ -3313,6 +3313,9 @@ function decodeSwapEntries(data) {
 }
 
 /* Единая точка записи: PUT с телом или DELETE (body === null). true = база приняла. */
+/* Статус последней ошибки облака: 401/403 = права/правила, -1 = сеть. */
+var lastCloudStatus = 0;
+
 async function cloudWrite(path, body) {
   try {
     const url = await sharedUrlWithAuth(cloudRoot() + "/" + path + ".json");
@@ -3322,11 +3325,27 @@ async function cloudWrite(path, body) {
         ? { method: "DELETE" }
         : { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
     );
-    if (!resp.ok) console.warn("weeqo: база отклонила запись (" + resp.status + ") " + path);
+    if (!resp.ok) {
+      lastCloudStatus = resp.status;
+      console.warn("weeqo: база отклонила запись (" + resp.status + ") " + path +
+        (resp.status === 401 || resp.status === 403
+          ? " — опубликуй правила из firebase-rules.json (Realtime Database → Правила) и включи Anonymous в Authentication → Sign-in method"
+          : ""));
+    } else {
+      lastCloudStatus = 0;
+    }
     return resp.ok;
   } catch (e) {
+    lastCloudStatus = -1;
     return false;
   }
+}
+
+/* Тост при неудачной записи: при 401/403 дело в правах базы, а не в интернете. */
+function cloudFailHint() {
+  if (lastCloudStatus === 401 || lastCloudStatus === 403)
+    return "база отклонила запись (" + lastCloudStatus + ") — проверь правила Firebase и Anonymous-вход";
+  return "не отправилось — проверь интернет";
 }
 
 /* Редактор/владелец: замена уходит сразу в опубликованные, по одной записи. */
@@ -3359,7 +3378,7 @@ async function proposeSwapEntry(key, entry) {
   });
   delete payload.pendingSync;
   const ok = await cloudWrite("weeqo-pending/" + encodeSwapKey(key), payload);
-  if (!ok) toast("не отправилось — проверь интернет");
+  if (!ok) toast(cloudFailHint());
   return ok;
 }
 
@@ -3499,6 +3518,11 @@ async function pullSharedSwaps() {
   if (document.getElementById("swap-backdrop")) return;
   try {
     const resp = await fetch(await sharedUrlWithAuth(url), { headers: { Accept: "application/json" }, cache: "no-store" });
+    if ((resp.status === 401 || resp.status === 403) && !pullSharedSwaps._warned) {
+      /* Один раз за сессию подсвечиваем в консоли, почему облако молчит. */
+      pullSharedSwaps._warned = true;
+      console.warn("weeqo: облако отклоняет чтение (" + resp.status + ") — опубликуй правила из firebase-rules.json в Firebase Console и включи Anonymous-вход");
+    }
     let remote = {};
     if (resp.ok) {
       const data = await resp.json();
