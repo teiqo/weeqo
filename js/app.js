@@ -423,6 +423,28 @@ function rowHtml(slot, live, dIso) {
   </div>${swapButtonHtml(dIso, slot.n)}</div>`;
 }
 
+/* Перерыв между парами: маленький чип, встроенный в линию-разделитель
+   (в духе подложки аудитории, только на стыке строк). */
+function breakChipHtml(gap) {
+  return `<div class="agenda-break"><span class="agenda-break-chip">${gap >= 30 ? "большой перерыв" : "перерыв"} · <strong>${bellDuration(gap)}</strong></span></div>`;
+}
+
+/* Между соседними парами вставляем чип перерыва.
+   Рядом с окном не ставим — строка окна сама про разрыв говорит. */
+function withBreaksHtml(slots, live, dIso) {
+  const out = [];
+  let prev = null;
+  slots.forEach((s) => {
+    if (prev && !prev.window && !s.window) {
+      const gap = mins(s.from) - mins(prev.to);
+      if (gap > 0) out.push(breakChipHtml(gap));
+    }
+    out.push(rowHtml(s, live, dIso));
+    prev = s;
+  });
+  return out.join("");
+}
+
 function emptyDayHtml(d) {
   const summer = isSummer(d);
   const off = isDayOff(d);
@@ -502,7 +524,7 @@ function dayHtml(d, withLive, future) {
     const liveHost = withLive ? `<div id="live-host">${liveCardHtml(live)}</div>` : "";
     const completedHost = today && withLive && !future ? completedBlockHtml(completed, dIso) : "";
     const list = visible.length
-      ? `<div class="agenda-list">${visible.map((s) => rowHtml(s, live, dIso)).join("")}</div>`
+      ? `<div class="agenda-list">${withBreaksHtml(visible, live, dIso)}</div>`
       : "";
     body = `${completedHost}${liveHost}${list}`;
   }
@@ -533,9 +555,7 @@ function weekHtml() {
       </div>
       ${
         lessons.length
-          ? `<div class="agenda-list">${rows
-              .map((s) => rowHtml(s, null, iso(d)))
-              .join("")}</div>`
+          ? `<div class="agenda-list">${withBreaksHtml(rows, null, iso(d))}</div>`
           : `<div class="weekly-empty-day compact">${ICON_EMPTY}<strong>${
               isSummer(d) ? "каникулы" : d.getDay() === 0 ? "выходной" : "пар нет"
             }</strong></div>`
@@ -600,9 +620,7 @@ function bellsRows(kind) {
     if (!next) return;
     const gap = bellMinutes(next.range.from) - bellMinutes(item.range.to);
     if (gap <= 0) return;
-    rows.push(`<div class="agenda-row is-bell-break">
-      <div class="bell-break-line"><span>${gap >= 30 ? "большой перерыв" : "перерыв"}</span><strong>${bellDuration(gap)}</strong><small>${item.range.to}–${next.range.from}</small></div>
-    </div>`);
+    rows.push(breakChipHtml(gap));
   });
   return rows.join("");
 }
@@ -901,7 +919,7 @@ function applyTheme() {
   const root = document.documentElement;
   root.dataset.theme = state.theme;
   // Тёмные варианты neutral/opaque больше не переключают тему сами.
-  // Для белого режима и������������п������льзуем отдельные светлые варианты этих же палитр.
+  // Для белого режима и������������п������льзуем отдельные светлые ва��ианты этих же палитр.
   if (!PALETTES.includes(state.palette)) state.palette = "default";
   root.dataset.theme = state.theme;
   if (state.palette === "default") root.removeAttribute("data-weekly-palette");
@@ -1409,7 +1427,7 @@ function bindStrip() {
       step,
       max: lastRect.left - firstRect.left,
       firstCenter: firstRect.left + firstRect.width / 2,
-      /* Курсор цепляет любую нажатую ячейку, а не только текущую. */
+      /* Курсор цепляет любую нажатую ��чейку, а не только текущую. */
       grabOffset: e.clientX - (firstRect.left + firstRect.width / 2 + pressedPosition),
       targetIndex: selectedIndex,
       underIndex: selectedIndex,
@@ -2478,7 +2496,9 @@ function refreshSchedule(force) {
   return fetch(SCHEDULE_URL + "?t=" + Date.now(), { cache: "no-store" })
     .then((res) => (res.ok ? res.json() : null))
     .then((payload) => {
-      if (!payload || !Array.isArray(payload.groups) || !payload.groups.length) return false;
+      /* Файл пришёл, но групп нет — парсер на GitHub ещё ни разу не записал данные. */
+      if (payload && Array.isArray(payload.groups) && !payload.groups.length) return "empty";
+      if (!payload || !Array.isArray(payload.groups)) return false;
       scheduleFetchedAt = Date.now();
       try {
         localStorage.setItem(SCHEDULE_CACHE_KEY, JSON.stringify(payload));
@@ -2529,7 +2549,7 @@ function readableAccent(hex, theme) {
    Пустая строка = замены хранятся только на устройстве, как раньше.
    Проверить без правки кода можно параметром ?swaps-cloud=адрес. */
 /* Конфиг переехал в js/config.js — правь там, этот файл больше не трогай.
-   Читаем из window с запасными значениями на случай, если config.js не загрузился. */
+   Читаем из window с запасными значениями на сл��чай, если config.js не загрузился. */
 var SHARED_SWAPS_URL = window.SHARED_SWAPS_URL || "";
 var FIREBASE_API_KEY = window.FIREBASE_API_KEY || "";
 var TELEGRAM_BOT_NAME = window.TELEGRAM_BOT_NAME || "";
@@ -3241,8 +3261,8 @@ function renderDataStamp() {
   const offline = typeof navigator !== "undefined" && !navigator.onLine;
   const when = scheduleUpdatedAt ? fmtStamp(scheduleUpdatedAt) : "";
   if (!when) {
-    /* Данных ещё не было: пишем только «офлайн», иначе прячем. */
-    el.textContent = offline ? "офлайн" : "";
+    /* Данных ещё не было: пишем только «офлайн», иначе ��рячем. */
+    el.textContent = offline ? "��флайн" : "";
     el.hidden = !offline;
     return;
   }
@@ -3328,12 +3348,16 @@ function manualRefresh(btn) {
   if (refreshInFlight) return;
   refreshInFlight = true;
   btn.disabled = true;
-  const icon = btn.querySelector(".weekly-settings-icon svg");
+  const icon = btn.querySelector(".weekly-settings-icon svg") || btn.querySelector("svg");
   if (icon) icon.classList.add("is-spinning");
   /* Замены тянем параллельно, у них своя защита от ошибок сети. */
   Promise.resolve(pullSharedSwaps()).catch(() => {});
   refreshSchedule(true)
-    .then((applied) => toast(applied ? "данные обновлены" : "не удалось обновить — проверь интернет"))
+    .then((result) => {
+      if (result === true) toast("данные обновлены");
+      else if (result === "empty") toast("на сервере пока пусто — парсер ещё не отработал");
+      else toast("не удалось обновить — проверь интернет");
+    })
     .catch(() => toast("не удалось обновить — проверь интернет"))
     .finally(() => {
       refreshInFlight = false;
@@ -3347,6 +3371,8 @@ function manualRefresh(btn) {
   if (btn) btn.addEventListener("click", openUpdatesSheet);
   const refreshBtn = document.getElementById("go-refresh");
   if (refreshBtn) refreshBtn.addEventListener("click", () => manualRefresh(refreshBtn));
+  const headRefreshBtn = document.getElementById("refresh-btn");
+  if (headRefreshBtn) headRefreshBtn.addEventListener("click", () => manualRefresh(headRefreshBtn));
   window.addEventListener("online", renderDataStamp);
   window.addEventListener("offline", renderDataStamp);
   renderDataStamp();
