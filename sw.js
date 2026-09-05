@@ -1,4 +1,4 @@
-const CACHE = "weeqo-groups-v56";
+const CACHE = "weeqo-groups-v57";
 const ASSETS = [
   "./",
   "./index.html",
@@ -40,7 +40,8 @@ self.addEventListener("fetch", (event) => {
   if (
     event.request.url.indexOf("data/schedule.json") !== -1 ||
     event.request.url.indexOf("data/changelog.json") !== -1 ||
-    event.request.url.indexOf("js/config.js") !== -1
+    event.request.url.indexOf("js/config.js",
+  "js/local-config.js") !== -1
   ) {
     event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
     return;
