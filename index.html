@@ -10,10 +10,27 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="weeqo" />
-    <meta name="description" content="расписание группы тм-303/б" />
+    <meta
+      name="description"
+      content="weeqo — удобное расписание занятий: какая пара идёт сейчас, сколько до конца, что дальше, звонки и вся неделя. Работает офлайн, без регистрации."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="weeqo" />
+    <meta property="og:title" content="weeqo — расписание занятий" />
+    <meta
+      property="og:description"
+      content="weeqo — удобное расписание занятий: какая пара идёт сейчас, сколько до конца, что дальше, звонки и вся неделя. Работает офлайн, без регистрации."
+    />
+    <meta property="og:image" content="images/weekly-180.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="weeqo — расписание занятий" />
+    <meta
+      name="twitter:description"
+      content="weeqo — удобное расписание занятий: какая пара идёт сейчас, сколько до конца, что дальше, звонки и вся неделя. Работает офлайн, без регистрации."
+    />
     <link rel="icon" href="images/weekly.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" sizes="180x180" href="images/weekly-180.png" />
-    <title>weeqo · тм-303/б</title>
+    <title>weeqo — расписание занятий</title>
     <link rel="stylesheet" href="assets/index-DpiSe78P.css" />
     <link rel="stylesheet" href="assets/weekly-VO4sFbvD.css" />
     <link rel="stylesheet" href="assets/WeeklyApp-BMeQie97.css" />
@@ -138,13 +155,36 @@
                           </svg>
                         </span>
                         <span class="weekly-settings-copy">
-                          <strong>палитра</strong>
+                          <strong>тема</strong>
                           <span id="palette-hint">базовая</span>
                         </span>
                       </span>
-                      <button class="weekly-palette-toggle" id="palette-toggle" type="button" aria-label="палитра">
-                        <i></i><i></i><i></i><i></i>
-                      </button>
+                      <div class="weekly-theme-modes" id="theme-modes" role="group" aria-label="тема">
+                        <button type="button" data-mode="default" aria-pressed="true">базовая</button>
+                        <button type="button" data-mode="accent" aria-pressed="false">акцент</button>
+                      </div>
+                    </div>
+
+                    <div class="weekly-settings-row" id="accent-row" hidden>
+                      <span class="weekly-settings-row-main">
+                        <span class="weekly-settings-icon is-palette">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="8" />
+                            <path d="M12 4v16" />
+                          </svg>
+                        </span>
+                        <span class="weekly-settings-copy">
+                          <strong>цвет акцента</strong>
+                          <span id="accent-hint">#0A84FF</span>
+                        </span>
+                      </span>
+                      <input
+                        class="weekly-accent-input"
+                        id="accent-color"
+                        type="color"
+                        value="#0A84FF"
+                        aria-label="цвет акцента"
+                      />
                     </div>
 
                     <div class="weekly-settings-row">
@@ -256,6 +296,23 @@
                         <path d="M9 6l6 6-6 6" />
                       </svg>
                     </button>
+
+                    <a class="weekly-settings-row weekly-settings-link" id="go-cool" href="https://t.me/teiqo" target="_blank" rel="noopener noreferrer">
+                      <span class="weekly-settings-row-main">
+                        <span class="weekly-settings-icon is-cool">
+                          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M12 3.1l2.6 5.5 6 .8-4.4 4.1 1.1 5.9-5.3-2.9-5.3 2.9 1.1-5.9L3.4 9.4l6-.8z" />
+                          </svg>
+                        </span>
+                        <span class="weekly-settings-copy">
+                          <strong>стать крутым</strong>
+                          <span>телеграм автора · @teiqo</span>
+                        </span>
+                      </span>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    </a>
 
                     <div class="weekly-settings-freshness">
                       <span id="freshness">группа тм-303/б</span>

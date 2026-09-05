@@ -16,79 +16,45 @@ const MONTHS = [
   "ноября",
   "декабря",
 ];
-const PALETTES = [
-  "default",
-  "colorful",
-  "neutral",
-  "opaque",
-  "ocean",
-  "forest",
-  "plum",
-  "sand",
-  "aurora",
-  "sunset",
-  "candy",
-  "cyber",
-  "midnight",
-  "rose",
-  "mint",
-  "coral",
-];
-
-/* Все дополнительные палитры сохраняют отдельные светлые и тёмные варианты. */
-const LIGHT_VARIANT_PALETTES = new Set([
-  "neutral",
-  "opaque",
-  "ocean",
-  "forest",
-  "plum",
-  "sand",
-  "aurora",
-  "sunset",
-  "candy",
-  "cyber",
-  "midnight",
-  "rose",
-  "mint",
-  "coral",
-]);
+/* Две темы: базовая и акцентная со своим цветом. */
+const PALETTES = ["default", "accent"];
+const DEFAULT_ACCENT = "#0A84FF";
 
 const PALETTE_COLORS = {
   default: { light: "#F5F5F7", dark: "#000000" },
-  colorful: { light: "#F5F5FA", dark: "#0F1119" },
-  neutral: { light: "#EEF2F5", dark: "#1A2026" },
-  opaque: { light: "#F2F0EA", dark: "#0A0A0B" },
-  ocean: { light: "#EDF4F8", dark: "#0B1620" },
-  forest: { light: "#EFF4EE", dark: "#0D1712" },
-  plum: { light: "#F5F0F6", dark: "#150F1A" },
-  sand: { light: "#F7F2EA", dark: "#17130E" },
-  aurora: { light: "#F1F6F7", dark: "#0C151A" },
-  sunset: { light: "#FFF3EC", dark: "#1C1114" },
-  candy: { light: "#FFF2F8", dark: "#1A101D" },
-  cyber: { light: "#EFF8F6", dark: "#090F14" },
-  midnight: { light: "#EEF0FB", dark: "#0C1020" },
-  rose: { light: "#FCEEF3", dark: "#1B1014" },
-  mint: { light: "#EAF6F1", dark: "#0A1614" },
-  coral: { light: "#FFF0EB", dark: "#1C1310" },
+  accent: { light: "#F5F5F7", dark: "#000000" },
 };
 const PALETTE_LABEL = {
   default: "базовая",
-  colorful: "цветная",
-  neutral: "нейтральная",
-  opaque: "глубоко тёмная",
-  ocean: "океан",
-  forest: "лесная",
-  plum: "сливовая",
-  sand: "песчаная",
-  aurora: "аврора",
-  sunset: "закат",
-  candy: "конфетная",
-  cyber: "кибер",
-  midnight: "полночь",
-  rose: "роза",
-  mint: "мятная",
-  coral: "коралл",
+  accent: "акцентная",
 };
+
+/* Цвет текста поверх акцента: светлые оттенки требуют тёмного текста. */
+function accentInk(hex) {
+  const n = String(hex || "").replace("#", "");
+  if (n.length !== 6) return "#ffffff";
+  const ch = (i) => parseInt(n.slice(i, i + 2), 16) / 255;
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const lum = 0.2126 * lin(ch(0)) + 0.7152 * lin(ch(2)) + 0.0722 * lin(ch(4));
+  return lum > 0.5 ? "#101014" : "#ffffff";
+}
+
+/* Ведение мышью или пальцем по рулетке рисует точно такую же сцену,
+           как колесо мыши: день + блок «следующих дней» с той же анимацией,
+           поэтому после отпускания ничего не перерисовывается заново. */
+function mixHex(hex, base, ratio) {
+  const a = String(hex || "").replace("#", "");
+  const b = String(base || "").replace("#", "");
+  if (a.length !== 6 || b.length !== 6) return "#" + (a || b || "000000");
+  const part = (i) => {
+    const x = parseInt(a.slice(i, i + 2), 16);
+    const y = parseInt(b.slice(i, i + 2), 16);
+    return Math.round(x * ratio + y * (1 - ratio))
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${part(0)}${part(2)}${part(4)}`;
+}
 
 const ICON_EMPTY =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 11h18M10 16l4-4M14 16l-4-4"/></svg>';
@@ -102,6 +68,7 @@ const state = {
   tab: "schedule",
   theme: "dark",
   palette: "default",
+  accent: DEFAULT_ACCENT,
   windows: false,
   parityMode: "auto",
   settingsOpen: false,
@@ -116,6 +83,7 @@ const state = {
 };
 
 let quietMotion = false;
+let scrubPendingRender = false;
 let sceneTimer = null;
 let lastRenderAt = 0;
 
@@ -240,7 +208,7 @@ function dayEntry(d) {
   return days.find((x) => x.id === id) || days[days.length - 1];
 }
 
-// счёт учебных недель идёт от 1 сентября: неделя с 1 сентября — первая (нечётная)
+// счёт учебных недель идёт от 1 сентября: неделя с 1 сентября — первая, и она считается чётной
 function academicWeek(d) {
   const mondayOf = weekStart(startOfDay(d));
   let year = mondayOf.getFullYear();
@@ -254,7 +222,8 @@ function academicWeek(d) {
 
 function parityOf(d) {
   if (state.parityMode !== "auto") return state.parityMode;
-  return academicWeek(d) % 2 === 1 ? "odd" : "even";
+  // сентябрь стартует с чётной недели
+  return academicWeek(d) % 2 === 1 ? "even" : "odd";
 }
 
 function parityLabel(p) {
@@ -276,7 +245,7 @@ function isDayOff(d) {
   return d.getDay() === 0 || isSummer(d);
 }
 
-function slotsFor(d) {
+function slotsForBase(d) {
   if (isSummer(d)) return [];
   const p = parityOf(d);
   const entry = dayEntry(d);
@@ -384,7 +353,7 @@ function liveCardHtml(live) {
   const current = live.kind === "current";
   const status = current
     ? `<span><i></i>сейчас · ${s.n} пара</span><time id="live-clock">${clockText(live.now)}</time>`
-    : `<span>${ICON_CLOCK}далее · ${s.n} пара</span><time id="live-clock">${s.from}</time>`;
+      : `<span>${ICON_CLOCK}далее · ${s.n} пара</span><time id="live-clock">${s.from}</time>`;
   const progress = current
     ? `<div class="live-card-progress"><i id="live-progress" style="transform:scaleX(${live.progress.toFixed(
         3
@@ -416,13 +385,15 @@ function liveCardHtml(live) {
   </article>`;
 }
 
-function rowHtml(slot, live) {
+function rowHtml(slot, live, dIso) {
   const isCurrent = live && live.kind === "current" && live.slot.n === slot.n && !slot.window;
   const isNext = live && live.kind === "next" && live.slot.n === slot.n && !slot.window;
   const cls = ["agenda-row"];
   if (isCurrent) cls.push("is-overlap");
   if (isNext) cls.push("is-next");
   if (slot.tag) cls.push("is-subgroup-row");
+  if (slot.cancelled) cls.push("is-cancelled");
+  if (slot.swapped) cls.push("is-swapped");
 
   const time = `<div class="agenda-row-time"><time>${slot.from}<span>${slot.to}</span></time></div>`;
 
@@ -431,7 +402,7 @@ function rowHtml(slot, live) {
       <strong>окно</strong>
       <span class="lesson-meta"><span class="lesson-advisory is-warning">пары нет</span></span>
       <small>${slot.n} пара · 1 ч 35 мин свободно</small>
-    </div></div>`;
+    </div>${swapButtonHtml(dIso, slot.n)}</div>`;
   }
 
   const mark = isCurrent
@@ -440,11 +411,17 @@ function rowHtml(slot, live) {
       ? `<span class="lesson-origin-mark is-next">далее</span>`
       : "";
 
+  const swapMark = slot.cancelled
+    ? `<span class="lesson-origin-mark is-swap">отменена</span>`
+    : slot.swapped
+      ? `<span class="lesson-origin-mark is-swap">замена</span>`
+      : "";
+
   return `<div class="${cls.join(" ")}">${time}<div class="agenda-row-content">
-    <strong>${slot.subject}${mark}</strong>
+    <strong>${slot.subject}${swapMark}${mark}</strong>
     <span class="lesson-meta">${metaHtml(slot)}</span>
     <small>${slot.n} пара · 1 ч 35 мин</small>
-  </div></div>`;
+  </div>${swapButtonHtml(dIso, slot.n)}</div>`;
 }
 
 function emptyDayHtml(d) {
@@ -479,7 +456,7 @@ function completedLabel(n) {
 
 let completedOpen = false;
 
-function completedBlockHtml(slots) {
+function completedBlockHtml(slots, dIso) {
   if (!slots.length) return "";
   const open = completedOpen ? "true" : "false";
   return `<div class="completed-lessons t-acc" data-open="${open}">
@@ -489,13 +466,16 @@ function completedBlockHtml(slots) {
     </button>
     <div class="completed-lessons-panel t-acc-panel" aria-hidden="${completedOpen ? "false" : "true"}">
       <div class="completed-lessons-panel-inner t-acc-panel-inner">
-        <div class="agenda-list is-completed">${slots.map((s) => rowHtml(s, null)).join("")}</div>
+        <div class="agenda-list is-completed">${slots
+          .map((s) => rowHtml(s, null, dIso))
+          .join("")}</div>
       </div>
     </div>
   </div>`;
 }
 
 function dayHtml(d, withLive, future) {
+  const dIso = iso(d);
   const all = slotsFor(d);
   const lessons = all.filter((s) => !s.window);
   const rows = state.windows ? all : lessons;
@@ -521,9 +501,9 @@ function dayHtml(d, withLive, future) {
     body = emptyDayHtml(d);
   } else {
     const liveHost = withLive ? `<div id="live-host">${liveCardHtml(live)}</div>` : "";
-    const completedHost = today && withLive && !future ? completedBlockHtml(completed) : "";
+    const completedHost = today && withLive && !future ? completedBlockHtml(completed, dIso) : "";
     const list = visible.length
-      ? `<div class="agenda-list">${visible.map((s) => rowHtml(s, live)).join("")}</div>`
+      ? `<div class="agenda-list">${visible.map((s) => rowHtml(s, live, dIso)).join("")}</div>`
       : "";
     body = `${completedHost}${liveHost}${list}`;
   }
@@ -554,7 +534,9 @@ function weekHtml() {
       </div>
       ${
         lessons.length
-          ? `<div class="agenda-list">${rows.map((s) => rowHtml(s, null)).join("")}</div>`
+          ? `<div class="agenda-list">${rows
+              .map((s) => rowHtml(s, null, iso(d)))
+              .join("")}</div>`
           : `<div class="weekly-empty-day compact">${ICON_EMPTY}<strong>${
               isSummer(d) ? "каникулы" : d.getDay() === 0 ? "выходной" : "пар нет"
             }</strong></div>`
@@ -728,14 +710,14 @@ function setScene(html, direction) {
   const inX =
     direction === "forward" ? `translate3d(${dist}, 0, 0)` : `translate3d(calc(${dist} * -1), 0, 0)`;
 
-  old.animate(
+  const outAnim = old.animate(
     [
       { opacity: from.opacity, transform: from.transform, filter: from.filter },
       { opacity: 0, transform: outX, filter: `blur(${blur})` },
     ],
     { duration: dur, easing: ease, fill: "forwards" }
   );
-  next.animate(
+  const inAnim = next.animate(
     [
       { opacity: 0, transform: inX, filter: `blur(${blur})` },
       { opacity: 1, transform: "translate3d(0, 0, 0)", filter: "blur(0px)" },
@@ -743,11 +725,18 @@ function setScene(html, direction) {
     { duration: dur, easing: ease, fill: "both" }
   );
 
+  /* Каскадные анимации строк длятся дольше смены подложки: раньше таймер
+     обрывал их через dur, и при скролле/быстром листании пары моргали.
+     Ждём полного каскада и трогаем только свои WAAPI-анимации. */
+  const rowDur = cssTimeMs("--duration-fast", 320);
+  const rowStep = cssTimeMs("--duration-stagger", 55);
+  const total = Math.max(dur, rowDur + rowStep * 8);
+
   sceneTimer = window.setTimeout(() => {
     old.remove();
     next.classList.remove("is-entering");
     next.removeAttribute("data-direction");
-    next.getAnimations().forEach((a) => {
+    [outAnim, inAnim].forEach((a) => {
       try {
         a.commitStyles();
       } catch (err) {
@@ -760,7 +749,7 @@ function setScene(html, direction) {
     next.style.transform = "";
     next.style.filter = "";
     sceneTimer = null;
-  }, dur);
+  }, total);
 }
 
 function renderStrip() {
@@ -834,7 +823,8 @@ function renderHeader() {
   $("#week-badge").title = "чётность считается по номеру недели";
   $("#week-switch").classList.toggle("is-second", p === "even");
   $("#theme-hint").textContent = state.theme === "dark" ? "тёмная" : "светлая";
-  $("#palette-hint").textContent = PALETTE_LABEL[state.palette];
+  const paletteHint = $("#palette-hint");
+  if (paletteHint) paletteHint.textContent = PALETTE_LABEL[state.palette] || PALETTE_LABEL.default;
   $("#freshness").textContent = `группа ${groupName()}`;
 }
 
@@ -888,8 +878,11 @@ function liveSignature() {
 
 function tick() {
   if (state.tab !== "schedule") return;
+  /* во время вождения рулетки не рендерим из тика — иначе кадр рвётся */
+  if (scrub && scrub.pointerDown) return;
   const live = liveState(state.selected);
-  const sig = live ? `${live.kind}:${live.slot ? live.slot.n : "-"}` : "none";
+  // подпись считаем тем же способом, что и при рендере — иначе блок завершённых пар мигал каждую секунду
+  const sig = liveSignature();
   if (sig !== liveKey) {
     liveKey = sig;
     render();
@@ -914,24 +907,57 @@ function applyTheme() {
   root.dataset.theme = state.theme;
   // Тёмные варианты neutral/opaque больше не переключают тему сами.
   // Для белого режима используем отдельные светлые варианты этих же палитр.
-  const renderedPalette =
-    state.theme === "light" && LIGHT_VARIANT_PALETTES.has(state.palette)
-      ? `${state.palette}-light`
-      : state.palette;
-  if (renderedPalette === "default") root.removeAttribute("data-weekly-palette");
-  else root.dataset.weeklyPalette = renderedPalette;
+  if (!PALETTES.includes(state.palette)) state.palette = "default";
+  root.dataset.theme = state.theme;
+  if (state.palette === "default") root.removeAttribute("data-weekly-palette");
+  else root.dataset.weeklyPalette = state.palette;
+
+  if (state.palette === "accent") {
+    root.style.setProperty("--weekly-accent", state.accent);
+    root.style.setProperty("--weekly-on-accent", accentInk(state.accent));
+    root.style.setProperty(
+      "--weekly-accent-readable",
+      readableAccent(state.accent, state.theme),
+    );
+  } else {
+    root.style.removeProperty("--weekly-accent");
+    root.style.removeProperty("--weekly-on-accent");
+    root.style.removeProperty("--weekly-accent-readable");
+  }
 
   $("#theme-toggle").setAttribute("aria-pressed", state.theme === "dark" ? "true" : "false");
   $("#dark-switch").setAttribute("aria-pressed", state.theme === "dark" ? "true" : "false");
-  const pal = $("#palette-toggle");
-  pal.classList.toggle("is-colorful", state.palette === "colorful");
-  pal.classList.toggle("is-opaque", state.palette === "opaque");
-  pal.dataset.palette = state.palette;
+  const darkRow = $("#dark-switch");
+  if (darkRow) darkRow.disabled = false;
+  const modes = $("#theme-modes");
+  if (modes) {
+    modes.querySelectorAll("button[data-mode]").forEach((btn) => {
+      const on = btn.dataset.mode === state.palette;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+  const accentRow = $("#accent-row");
+  if (accentRow) accentRow.hidden = state.palette !== "accent";
+  const accentInput = $("#accent-color");
+  if (accentInput && accentInput.value.toLowerCase() !== state.accent.toLowerCase()) {
+    accentInput.value = state.accent;
+  }
+  const accentHint = $("#accent-hint");
+  if (accentHint) accentHint.textContent = state.accent.toUpperCase();
 
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
     const colors = PALETTE_COLORS[state.palette] || PALETTE_COLORS.default;
-    meta.setAttribute("content", state.theme === "light" ? colors.light : colors.dark);
+    let tint = state.theme === "light" ? colors.light : colors.dark;
+    /* Акцентная тема красит и сам фон — строка статуса должна совпадать. */
+    if (state.palette === "accent") {
+      tint =
+        state.theme === "light"
+          ? mixHex(state.accent, "#ffffff", 0.2)
+          : mixHex(state.accent, "#05050a", 0.26);
+    }
+    meta.setAttribute("content", tint);
   }
   applyFlags();
 }
@@ -945,6 +971,7 @@ function save() {
       JSON.stringify({
         theme: state.theme,
         palette: state.palette,
+        accent: state.accent,
         windows: state.windows,
         tab: state.tab,
         light: state.light,
@@ -965,6 +992,9 @@ function load() {
     const data = JSON.parse(raw);
     if (data.theme === "dark" || data.theme === "light") state.theme = data.theme;
     if (PALETTES.includes(data.palette)) state.palette = data.palette;
+    if (typeof data.accent === "string" && /^#[0-9a-f]{6}$/i.test(data.accent)) {
+      state.accent = data.accent;
+    }
     if (typeof data.windows === "boolean") state.windows = data.windows;
     if (["schedule", "bells"].includes(data.tab)) state.tab = data.tab;
     if (typeof data.light === "boolean") state.light = data.light;
@@ -1016,8 +1046,22 @@ function selectDate(d, direction, options) {
     state.selected = next;
     renderHeader();
     if (state.tab === "schedule") {
-      setScene(dayHtml(state.selected, true) + futureDaysHtml(), scrubDir);
-      liveKey = liveSignature();
+      if (options.preview) {
+        /* Во время вождения по рулетке сцена следует за пилюлей сразу,
+           но дёшево: без анимации смены и без блока «следующих дней» —
+           их дорисует полный рендер при отпускании. */
+        scrubPendingRender = false;
+        quietMotion = true;
+        setScene(
+          dayHtml(state.selected, true) + futureDaysHtml(),
+          options.animated ? scrubDir : null
+        );
+        quietMotion = false;
+        liveKey = liveSignature();
+      } else {
+        setScene(dayHtml(state.selected, true) + futureDaysHtml(), scrubDir);
+        liveKey = liveSignature();
+      }
     }
     const strip = $("#strip");
     const key = iso(state.selected);
@@ -1102,8 +1146,10 @@ function paintScrub() {
       -cap,
       Math.min(cap, delta * (lite ? 0.38 : 0.52) + pointerVelocity * (lite ? 0.0014 : 0.0025))
     ) * between;
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const blur = reduced || lite ? 0 : Math.min(2.4, speed * 1.9 + Math.abs(delta) / 34) * between;
+  /* Блюр сцены на зелёной (и любой) теме давал ореол-свечение вокруг зелёных
+     карточек, которое резко проявлялось в момент начала перемещения по дням.
+  /* Полностью убираем размытие сцены при скрабинге — сдвиг/масштаб остаются. */
+  const blur = 0;
   selection.style.transform = `translate3d(${scrub.position.toFixed(2)}px, 0, 0)`;
   if (under !== scrub.underIndex) {
     const buttons = dayButtons();
@@ -1144,11 +1190,8 @@ function scrubFrameStep(now) {
       scrub.slowFrameCount = Math.max(0, (scrub.slowFrameCount || 0) - 1);
     }
     const scene = $("#scene");
-    if (!scrub.lowFrameRate && ((scrub.slowFrameCount || 0) >= 2 || scrub.frameInterval > 24)) {
-      scrub.lowFrameRate = true;
-      scrub.strip.classList.add("is-motion-lite");
-      if (scene) scene.classList.add("is-motion-lite");
-    } else if (scrub.lowFrameRate && (scrub.fastFrameCount || 0) >= 8) {
+    /* Режим анимаций один для всех устройств: облегчённый вариант больше не включается. */
+    if (scrub.lowFrameRate) {
       scrub.lowFrameRate = false;
       scrub.strip.classList.remove("is-motion-lite");
       if (scene) scene.classList.remove("is-motion-lite");
@@ -1163,8 +1206,8 @@ function scrubFrameStep(now) {
       scrub.velocity,
       scrub.target,
       dt,
-      scrub.pointerDown ? 330 : 410,
-      scrub.pointerDown ? 23 : 27
+      scrub.pointerDown ? 330 : 420,
+      scrub.pointerDown ? 23 : 40
     );
     scrub.position = Math.max(-8, Math.min(scrub.max + 8, next.position));
     scrub.velocity = next.velocity;
@@ -1216,7 +1259,13 @@ function moveScrub(clientX) {
   const index = Math.max(0, Math.min(6, Math.round(scrub.target / scrub.step)));
   if (index !== scrub.targetIndex) {
     scrub.targetIndex = index;
-    selectDate(addDays(weekStart(state.selected), index), null, { silent: true });
+    /* Мышью ведём с анимацией смены дня, как при скролле колесиком;
+       на тачскрине — дёшево, без анимации, чтобы не ронять кадры. */
+    selectDate(addDays(weekStart(state.selected), index), null, {
+      silent: true,
+      preview: true,
+      animated: previewAnimated(),
+    });
   }
 }
 
@@ -1276,7 +1325,12 @@ function endScrub() {
     window.cancelAnimationFrame(scrubFrame);
     scrubFrame = null;
   }
-  renderStrip();
+  if (scrubPendingRender) {
+    scrubPendingRender = false;
+    render();
+  } else {
+    renderStrip();
+  }
   save();
 }
 
@@ -1295,6 +1349,10 @@ function settleScrub() {
   }
   scrub.pointerDown = false;
   scrub.target = scrub.targetIndex * scrub.step;
+  /* На телефоне быстрый флик оставляет огромную скорость, из-за которой
+     пружина проскакивает цель и линия сильно подпрыгивает. Гасим импульс
+     при отпускании, чтобы овершут был маленьким и аккуратным. */
+  scrub.velocity = Math.max(-900, Math.min(900, scrub.velocity * 0.5));
   scrub.strip.classList.remove("is-scrubbing");
   scrub.strip.classList.add("is-settling");
   const scene = $("#scene");
@@ -1337,6 +1395,7 @@ function bindStrip() {
     strip.classList.add("is-pressing");
     scrub = {
       pointerId: e.pointerId,
+      pointerType: e.pointerType,
       pointerDown: true,
       active: false,
       strip,
@@ -1362,9 +1421,19 @@ function bindStrip() {
       fastFrameCount: 0,
       lowFrameRate: false,
     };
-    /* Мышью скраббинг начинается только при горизонтальном движении:
-       короткий и долгий клик по дню работают одинаково. */
-    holdTimer = e.pointerType === "mouse" ? null : window.setTimeout(activateScrub, 135);
+    /* На тачскрине забираем указатель сразу: иначе при быстром старте
+       браузер отбирал жест (pointercancel) и выбор дня «спадал» —
+       приходилось сначала придержать палец, а потом вести. */
+    if (e.pointerType !== "mouse") {
+      try {
+        strip.setPointerCapture(e.pointerId);
+      } catch (err) {
+        /* ignore */
+      }
+    }
+    /* Долгое удержание больше не требуется: таймер остаётся только как
+       страховка для случая, когда палец стоит на месте. */
+    holdTimer = e.pointerType === "mouse" ? null : window.setTimeout(activateScrub, 45);
   });
 
   strip.addEventListener("pointermove", (e) => {
@@ -1377,10 +1446,10 @@ function bindStrip() {
       const absY = Math.abs(dy);
       /* Быстрый рывок пальцем даёт крупный первый шаг сразу по обеим осям.
          Активируем скрабинг, как только горизонталь преобладает, и отменяем
-         жест только при явно вертикальном свайпе — иначе выделение пропадало
+      /* жест только при явно вертикальном свайпе — иначе выделение пропадало
          при быстром старте перетаскивания на телефоне. */
-      const horizontal = absX > 6 && absX >= absY;
-      const vertical = absY > 12 && absY > absX * 1.3;
+      const horizontal = absX > 2 && absX >= absY * 0.8;
+      const vertical = absY > 14 && absY > absX * 1.8;
       if (horizontal) {
         if (holdTimer !== null) window.clearTimeout(holdTimer);
         activateScrub();
@@ -1409,7 +1478,12 @@ function bindStrip() {
   };
 
   strip.addEventListener("pointerup", release);
-  strip.addEventListener("pointercancel", () => endScrub());
+  strip.addEventListener("pointercancel", () => {
+    /* Если браузер отобрал жест посреди ведения — доводим выбор до конца,
+       а не сбрасываем его назад. */
+    if (scrub && scrub.active) settleScrub();
+    else endScrub();
+  });
   strip.addEventListener("lostpointercapture", (e) => {
     if (scrub && scrub.pointerId === e.pointerId && scrub.pointerDown) endScrub();
   });
@@ -1496,13 +1570,34 @@ function bindEvents() {
     save();
   });
 
-  $("#palette-toggle").addEventListener("click", () => {
-    const i = PALETTES.indexOf(state.palette);
-    state.palette = PALETTES[(i + 1) % PALETTES.length];
-    applyTheme();
-    renderHeader();
-    save();
-  });
+  const modes = $("#theme-modes");
+  if (modes) {
+    modes.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-mode]");
+      if (!btn) return;
+      const mode = btn.dataset.mode;
+      if (!PALETTES.includes(mode) || mode === state.palette) return;
+      state.palette = mode;
+      applyTheme();
+      renderHeader();
+      save();
+    });
+  }
+
+  const accentInput = $("#accent-color");
+  if (accentInput) {
+    const onAccent = (e) => {
+      const value = e.target.value;
+      if (!/^#[0-9a-f]{6}$/i.test(value)) return;
+      state.accent = value;
+      if (state.palette !== "accent") state.palette = "accent";
+      applyTheme();
+      renderHeader();
+      save();
+    };
+    accentInput.addEventListener("input", onAccent);
+    accentInput.addEventListener("change", onAccent);
+  }
 
   $("#windows-switch").addEventListener("click", () => {
     state.windows = !state.windows;
@@ -1538,29 +1633,99 @@ function bindEvents() {
     if (e.key === "ArrowLeft") shiftDay(-1);
   });
 
-  // свайп по дням
+  /* Свайп по дням: палец тянет сцену за собой, а день меняется уже на
+     отпускании — с обычной анимацией листания. Раньше день переключался
+     прямо посреди жеста, и анимацию съедал активный скролл. */
   const scene = $("#scene");
-  let x0 = null;
-  let y0 = null;
+  const swipeStage = $("#stage");
+  let swipe = null;
+
+  const setSwipeShift = (value) => {
+    if (!swipeStage) return;
+    swipeStage.style.setProperty("--swipe-x", `${value.toFixed(2)}px`);
+  };
+
+  const clearSwipe = (animated) => {
+    if (!swipeStage) return;
+    scene.classList.remove("is-swiping");
+    if (animated) {
+      scene.classList.add("is-swipe-return");
+      swipeStage.style.setProperty("--swipe-x", "0px");
+      window.setTimeout(() => {
+        scene.classList.remove("is-swipe-return");
+        swipeStage.style.removeProperty("--swipe-x");
+      }, 220);
+      return;
+    }
+    scene.classList.remove("is-swipe-return");
+    swipeStage.style.removeProperty("--swipe-x");
+  };
+
   scene.addEventListener(
     "touchstart",
     (e) => {
-      x0 = e.touches[0].clientX;
-      y0 = e.touches[0].clientY;
+      if (e.touches.length !== 1) {
+        swipe = null;
+        return;
+      }
+      const t = e.touches[0];
+      const target = t.target;
+      if (
+        target &&
+        target.closest &&
+        target.closest("#strip, button, a, input, textarea, select, .weekly-replace-sheet")
+      ) {
+        swipe = null;
+        return;
+      }
+      swipe = { x: t.clientX, y: t.clientY, dx: 0, axis: null };
     },
     { passive: true }
   );
+
   scene.addEventListener(
-    "touchend",
+    "touchmove",
     (e) => {
-      if (x0 === null) return;
-      const dx = e.changedTouches[0].clientX - x0;
-      const dy = e.changedTouches[0].clientY - y0;
-      x0 = null;
-      if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.4) shiftDay(dx < 0 ? 1 : -1);
+      if (!swipe || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - swipe.x;
+      const dy = t.clientY - swipe.y;
+      if (!swipe.axis) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        swipe.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+        if (swipe.axis === "x") {
+          scene.classList.remove("is-swipe-return");
+          scene.classList.add("is-swiping");
+        }
+      }
+      if (swipe.axis !== "x") return;
+      swipe.dx = dx;
+      /* резинка: сцена идёт мягче пальца и не улетает за край */
+      const eased = Math.sign(dx) * Math.min(Math.abs(dx) * 0.42, 52);
+      setSwipeShift(eased);
     },
     { passive: true }
   );
+
+  const endSwipe = (commit) => {
+    if (!swipe) return;
+    const dx = swipe.dx;
+    const axis = swipe.axis;
+    swipe = null;
+    if (axis !== "x") {
+      clearSwipe(false);
+      return;
+    }
+    if (commit && Math.abs(dx) >= 40) {
+      clearSwipe(false);
+      shiftDay(dx < 0 ? 1 : -1);
+      return;
+    }
+    clearSwipe(true);
+  };
+
+  scene.addEventListener("touchend", () => endSwipe(true), { passive: true });
+  scene.addEventListener("touchcancel", () => endSwipe(false), { passive: true });
 
   const vh = () =>
     document.documentElement.style.setProperty("--weekly-viewport-height", `${window.innerHeight}px`);
@@ -1643,7 +1808,10 @@ function futureDaysHtml() {
     if (d <= state.selected) continue;
     out.push(dayHtml(d, false, true));
   }
-  return out.join("");
+  if (!out.length) return "";
+  /* Обёртка нужна, чтобы будущие дни проявлялись каскадом,
+     а не возникали резко вместе со сменой сцены. */
+  return `<div class="weekly-future-days">${out.join("")}</div>`;
 }
 
 const ICON_CHECK =
@@ -1738,7 +1906,7 @@ function onboardingHtml() {
         </div>
         <span class="weekly-onboarding-kicker">weeqo beta</span>
         <h1>только расписание</h1>
-        <p>это просто короче смотреть расписание вооот</p>
+        <p>как это работает? каждые 30 минут мы берём расписание с сайта sustec.ru машиностроительного колледжа и загружаем его сюда</p>
       </div>
       <button class="weekly-onboarding-action" type="button" data-act="next">выбрать группу</button>
     </div>
@@ -1916,4 +2084,412 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
   init();
+}
+
+/* ---------- замена пары ---------- */
+
+/* var намеренно: эти значения нужны раннему рендеру до конца модуля */
+var SWAP_KEY = "weekly:swaps:v1";
+var swapMap = null;
+
+function loadSwaps() {
+  if (swapMap) return swapMap;
+  swapMap = {};
+  try {
+    const raw = localStorage.getItem(SWAP_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data && typeof data === "object") swapMap = migrateSwaps(data);
+    }
+  } catch (e) {
+    /* приватный режим */
+  }
+  return swapMap;
+}
+
+function saveSwaps() {
+  try {
+    localStorage.setItem(SWAP_KEY, JSON.stringify(loadSwaps()));
+  } catch (e) {
+    /* приватный режим */
+  }
+}
+
+function swapKey(dIso, n) {
+  return (state.group || DEFAULT_GROUP) + "|" + dIso + ":" + n;
+}
+
+function swapFor(dIso, n) {
+  return loadSwaps()[swapKey(dIso, n)] || null;
+}
+
+function setSwap(dIso, n, value) {
+  const map = loadSwaps();
+  if (value) map[swapKey(dIso, n)] = value;
+  else delete map[swapKey(dIso, n)];
+  saveSwaps();
+}
+
+/* Базовое расписание лежит в slotsForBase, а здесь накладываются замены. */
+function slotsFor(d) {
+  const list = slotsForBase(d);
+  if (!list.length) return list;
+  const map = loadSwaps();
+  const dIso = iso(d);
+  const prefix = (state.group || DEFAULT_GROUP) + "|" + dIso + ":";
+  let hasAny = false;
+  for (const key in map) {
+    if (key.indexOf(prefix) === 0) {
+      hasAny = true;
+      break;
+    }
+  }
+  if (!hasAny) return list;
+  return list.map((slot) => {
+    const sw = map[swapKey(dIso, slot.n)];
+    if (!sw) return slot;
+    const next = Object.assign({}, slot);
+    if (sw.cancelled) {
+      next.cancelled = true;
+      next.window = false;
+      next.empty = false;
+      if (!next.subject) next.subject = "пара отменена";
+      return next;
+    }
+    if (sw.subject) {
+      next.subject = sw.subject;
+      next.window = false;
+      next.empty = false;
+    }
+    if (sw.teacher !== undefined) next.teacher = sw.teacher;
+    if (sw.room !== undefined) next.room = sw.room;
+    next.swapped = true;
+    return next;
+  });
+}
+
+var ICON_SWAP =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 8h13l-3.5-3.5M20 16H7l3.5 3.5"/></svg>';
+
+function swapButtonHtml(dIso, n) {
+  if (!dIso) return "";
+  return (
+    '<button class="lesson-swap-btn" type="button" data-act="swap" data-date="' +
+    dIso +
+    '" data-n="' +
+    n +
+    '" aria-label="замена пары" title="замена пары">' +
+    ICON_SWAP +
+    "</button>"
+  );
+}
+
+function dateFromIso(dIso) {
+  const parts = String(dIso).split("-");
+  return startOfDay(new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
+}
+
+function closeSwapSheet() {
+  const backdrop = document.getElementById("swap-backdrop");
+  if (!backdrop) return;
+  backdrop.classList.remove("is-open");
+  window.setTimeout(() => backdrop.remove(), 160);
+}
+
+/* Каталог предметов группы: предмет + самые частые преподаватель и аудитория. */
+function subjectCatalog() {
+  const stats = new Map();
+  currentGroup().days.forEach((day) => {
+    day.slots.forEach((s) => {
+      if (!s.subject) return;
+      if (!stats.has(s.subject)) {
+        stats.set(s.subject, { subject: s.subject, teachers: new Map(), rooms: new Map() });
+      }
+      const entry = stats.get(s.subject);
+      if (s.teacher) entry.teachers.set(s.teacher, (entry.teachers.get(s.teacher) || 0) + 1);
+      if (s.room) entry.rooms.set(s.room, (entry.rooms.get(s.room) || 0) + 1);
+    });
+  });
+  const top = (counts) => {
+    let best = "";
+    let hits = 0;
+    counts.forEach((count, value) => {
+      if (count > hits) {
+        hits = count;
+        best = value;
+      }
+    });
+    return best;
+  };
+  return Array.from(stats.values())
+    .map((entry) => ({
+      subject: entry.subject,
+      teacher: top(entry.teachers),
+      room: top(entry.rooms),
+    }))
+    .sort((a, b) => a.subject.localeCompare(b.subject, "ru"));
+}
+
+function openSwapSheet(dIso, n) {
+  closeSwapSheet();
+  const d = dateFromIso(dIso);
+  const slot = slotsFor(d).find((s) => s.n === n) || null;
+  const sw = swapFor(dIso, n) || {};
+  const subject = sw.subject || (slot && !slot.window ? slot.subject || "" : "");
+  const teacher = sw.teacher !== undefined ? sw.teacher : (slot && slot.teacher) || "";
+  const room = sw.room !== undefined ? sw.room : (slot && slot.room) || "";
+  const timeText = slot ? slot.from + "–" + slot.to : "";
+  const catalog = subjectCatalog();
+  const known = catalog.find((item) => item.subject === subject) || null;
+  const customSubject = subject && !known ? subject : "";
+
+  const options = ['<option value="">не выбран</option>']
+    .concat(
+      catalog.map(
+        (item) =>
+          '<option value="' +
+          escapeHtml(item.subject) +
+          '" data-teacher="' +
+          escapeHtml(item.teacher) +
+          '" data-room="' +
+          escapeHtml(item.room) +
+          '"' +
+          (known && known.subject === item.subject ? " selected" : "") +
+          ">" +
+          escapeHtml(item.subject) +
+          (item.teacher ? " · " + escapeHtml(item.teacher) : "") +
+          "</option>"
+      )
+    )
+    .join("");
+
+  const backdrop = document.createElement("div");
+  backdrop.id = "swap-backdrop";
+  backdrop.className = "weekly-replace-backdrop";
+  backdrop.innerHTML =
+    '<div class="weekly-replace-sheet" role="dialog" aria-label="замена пары">' +
+    '<div class="weekly-replace-head"><strong>замена пары</strong><span>' +
+    escapeHtml(n + " пара" + (timeText ? " · " + timeText : "") + " · " + dateLabel(d)) +
+    "</span></div>" +
+    '<label class="weekly-replace-field"><span>предмет из расписания</span>' +
+    '<div class="weekly-replace-select"><select id="swap-subject">' +
+    options +
+    "</select></div></label>" +
+    '<label class="weekly-replace-field"><span>или свой предмет</span>' +
+    '<input id="swap-subject-custom" type="text" value="' +
+    escapeHtml(customSubject) +
+    '" placeholder="название предмета" /></label>' +
+    '<label class="weekly-replace-field"><span>преподаватель</span>' +
+    '<input id="swap-teacher" type="text" value="' +
+    escapeHtml(teacher) +
+    '" placeholder="фамилия" /></label>' +
+    '<label class="weekly-replace-field"><span>аудитория</span>' +
+    '<input id="swap-room" type="text" value="' +
+    escapeHtml(room) +
+    '" placeholder="номер" /></label>' +
+    '<p class="weekly-replace-hint">выбрал предмет из списка — преподаватель и аудитория подставятся сами; вписал свой предмет — они сбросятся</p>' +
+    '<div class="weekly-replace-actions">' +
+    '<button class="is-primary" type="button" data-swap="save">сохранить</button>' +
+    '<button type="button" data-swap="cancel-lesson">отменить пару</button>' +
+    '<button type="button" data-swap="reset">сбросить</button>' +
+    '<button type="button" data-swap="close">закрыть</button>' +
+    "</div></div>";
+
+  document.body.appendChild(backdrop);
+  window.requestAnimationFrame(() => backdrop.classList.add("is-open"));
+
+  const picker = backdrop.querySelector("#swap-subject");
+  const custom = backdrop.querySelector("#swap-subject-custom");
+  const teacherField = backdrop.querySelector("#swap-teacher");
+  const roomField = backdrop.querySelector("#swap-room");
+  /* Подставленное автоматически можно сбрасывать, вписанное руками — нет. */
+  let autoFilled =
+    Boolean(known) && teacher === (known.teacher || "") && room === (known.room || "");
+
+  picker.addEventListener("change", () => {
+    const option = picker.options[picker.selectedIndex];
+    if (!picker.value || !option) return;
+    custom.value = "";
+    teacherField.value = option.dataset.teacher || "";
+    roomField.value = option.dataset.room || "";
+    autoFilled = true;
+  });
+
+  custom.addEventListener("input", () => {
+    if (!custom.value.trim()) return;
+    if (picker.value) picker.value = "";
+    if (autoFilled) {
+      teacherField.value = "";
+      roomField.value = "";
+      autoFilled = false;
+    }
+  });
+
+  const commit = () => {
+    closeSwapSheet();
+    render();
+  };
+
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) {
+      closeSwapSheet();
+      return;
+    }
+    const btn = e.target.closest("button[data-swap]");
+    if (!btn) return;
+    const act = btn.dataset.swap;
+    if (act === "close") {
+      closeSwapSheet();
+      return;
+    }
+    if (act === "reset") {
+      setSwap(dIso, n, null);
+      commit();
+      return;
+    }
+    if (act === "cancel-lesson") {
+      setSwap(dIso, n, { cancelled: true });
+      commit();
+      return;
+    }
+    const nextSubject = custom.value.trim() || picker.value.trim();
+    const nextTeacher = teacherField.value.trim();
+    const nextRoom = roomField.value.trim();
+    if (!nextSubject && !nextTeacher && !nextRoom) {
+      setSwap(dIso, n, null);
+      commit();
+      return;
+    }
+    setSwap(dIso, n, { subject: nextSubject, teacher: nextTeacher, room: nextRoom });
+    commit();
+  });
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeSwapSheet();
+});
+
+(() => {
+  const scene = document.getElementById("scene");
+  if (!scene) return;
+  scene.addEventListener("click", (e) => {
+    const btn = e.target.closest('[data-act="swap"]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openSwapSheet(btn.dataset.date, Number(btn.dataset.n));
+  });
+})();
+
+/* ---------- автообновление расписания ----------
+   data/schedule.json пересобирает GitHub Action каждые 30 минут из PDF
+   на sustec.ru, а приложение с тем же шагом его перечитывает. */
+var SCHEDULE_URL = "data/schedule.json";
+var SCHEDULE_CACHE_KEY = "weekly:schedule-cache:v1";
+var SCHEDULE_TTL = 30 * 60 * 1000;
+var scheduleFetchedAt = 0;
+var scheduleApply = null;
+
+function previewAnimated() {
+  /* Один и тот же сценарий анимаций на компьютере и на телефоне:
+     без троттлинга и без облегчённого режима. */
+  return Boolean(scrub);
+}
+
+function migrateSwaps(data) {
+  const out = {};
+  Object.keys(data).forEach((key) => {
+    out[key.indexOf("|") === -1 ? "\u0442\u043c-303/\u0431|" + key : key] = data[key];
+  });
+  return out;
+}
+
+function scheduleModule() {
+  if (scheduleApply) return Promise.resolve(scheduleApply);
+  return import("./schedule.js").then((mod) => {
+    scheduleApply = mod.applyRemoteGroups;
+    return scheduleApply;
+  });
+}
+
+function scheduleStamp(payload) {
+  const el = $("#freshness");
+  if (!el || !payload || !payload.updatedAt) return;
+  const when = new Date(payload.updatedAt);
+  if (Number.isNaN(when.getTime())) return;
+  const hh = String(when.getHours()).padStart(2, "0");
+  const mm = String(when.getMinutes()).padStart(2, "0");
+  el.textContent = "\u0440\u0430\u0441\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u043e \u0432 " + hh + ":" + mm;
+}
+
+function applySchedulePayload(payload) {
+  return scheduleModule().then((apply) => {
+    if (typeof apply !== "function") return false;
+    if (!apply(payload)) return false;
+    if (!GROUPS.some((g) => g.id === state.group)) {
+      state.group = GROUPS.some((g) => g.id === DEFAULT_GROUP) ? DEFAULT_GROUP : GROUPS[0].id;
+      state.draftGroup = state.group;
+      save();
+    }
+    scheduleStamp(payload);
+    render();
+    renderStrip();
+    return true;
+  });
+}
+
+function cachedSchedulePayload() {
+  try {
+    const raw = localStorage.getItem(SCHEDULE_CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data && Array.isArray(data.groups) ? data : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function refreshSchedule(force) {
+  if (!force && Date.now() - scheduleFetchedAt < SCHEDULE_TTL) return Promise.resolve(false);
+  return fetch(SCHEDULE_URL + "?t=" + Date.now(), { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((payload) => {
+      if (!payload || !Array.isArray(payload.groups) || !payload.groups.length) return false;
+      scheduleFetchedAt = Date.now();
+      try {
+        localStorage.setItem(SCHEDULE_CACHE_KEY, JSON.stringify(payload));
+      } catch (e) {
+        /* приватный режим */
+      }
+      return applySchedulePayload(payload);
+    })
+    .catch(() => false);
+}
+
+(function startScheduleUpdates() {
+  const cached = cachedSchedulePayload();
+  if (cached) applySchedulePayload(cached);
+  refreshSchedule(true);
+  window.setInterval(() => refreshSchedule(true), SCHEDULE_TTL);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshSchedule(false);
+  });
+  window.addEventListener("online", () => refreshSchedule(true));
+})();
+
+/* Слишком светлый акцент на светлом фоне и слишком тёмный на тёмном
+   не читаются, поэтому для текста и иконок берём подправленный оттенок. */
+function accentLuminance(hex) {
+  const n = String(hex || "").replace("#", "");
+  if (n.length !== 6) return 0.5;
+  const ch = (i) => parseInt(n.slice(i, i + 2), 16) / 255;
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  return 0.2126 * lin(ch(0)) + 0.7152 * lin(ch(2)) + 0.0722 * lin(ch(4));
+}
+
+function readableAccent(hex, theme) {
+  const lum = accentLuminance(hex);
+  if (theme === "light" && lum > 0.5) return mixHex(hex, "#101014", 0.46);
+  if (theme !== "light" && lum < 0.12) return mixHex(hex, "#ffffff", 0.5);
+  return hex;
 }
