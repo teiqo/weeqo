@@ -25,7 +25,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-          SHARED_SWAPS_URL: ${{ vars.SHARED_SWAPS_URL }}
+          SHARED_SWAPS_URL: ${{ vars.SHARED_SWAPS_URL || secrets.SHARED_SWAPS_URL }}
         run: python3 tools/notify_telegram.py
 
       - name: commit notify state
