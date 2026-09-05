@@ -3,8 +3,16 @@ name: deploy pages
 on:
   push:
   workflow_dispatch:
+  # Парсер расписания коммитит data/schedule.json от имени бота, а такой
+  # коммит не создаёт событие push для других workflow (ограничение GitHub).
+  # Из-за этого на сайте оставалось старое расписание — теперь публикация
+  # запускается сразу после завершения update-schedule.
+  workflow_run:
+    workflows: ["update-schedule"]
+    types: [completed]
 
 permissions:
+  contents: read
   pages: write
   id-token: write
 
@@ -20,24 +28,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # При запуске по workflow_run нужна свежая вершина основной ветки,
+          # иначе возьмётся коммит до обновления расписания.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.repository.default_branch || github.ref }}
 
-      - name: build js/config.js from environment
+      - name: подставить значения в js/config.js
         env:
           SHARED_SWAPS_URL: ${{ vars.SHARED_SWAPS_URL }}
           TELEGRAM_BOT_NAME: ${{ vars.TELEGRAM_BOT_NAME }}
           TELEGRAM_BOT_ID: ${{ vars.TELEGRAM_BOT_ID }}
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           TELEGRAM_BOT_TOKEN_SHA256: ${{ secrets.TELEGRAM_BOT_TOKEN_SHA256 }}
+        run: python3 tools/build_config.py
+
+      - name: показать, какое расписание публикуется
         run: |
-          printf '%s\n' \
-            '/* ---------- конфиг weeqo: генерируется Action-ом из окружения github-pages ---------- */' \
-            "var SHARED_SWAPS_URL = \"${SHARED_SWAPS_URL}\";" \
-            "var FIREBASE_API_KEY = \"${FIREBASE_API_KEY}\";" \
-            "var TELEGRAM_BOT_NAME = \"${TELEGRAM_BOT_NAME}\";" \
-            "var TELEGRAM_BOT_ID = \"${TELEGRAM_BOT_ID}\";" \
-            "var TELEGRAM_BOT_TOKEN_SHA256 = \"${TELEGRAM_BOT_TOKEN_SHA256}\";" \
-            > js/config.js
-          grep -c '^var ' js/config.js
+          python3 -c "import json; d=json.load(open('data/schedule.json')); print('updatedAt:', d.get('updatedAt')); print('групп:', len(d.get('groups', [])))"
 
       - name: stage site (без служебных файлов)
         run: |
