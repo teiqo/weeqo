@@ -1836,14 +1836,14 @@ function futureDaysHtml() {
 
 const ICON_CHECK =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 13l4 4 10-10"/></svg>';
-const ICON_CAL =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>';
 const ICON_PLUS =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 const ICON_CHEVRON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
 const ICON_GIFT =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18M12 8v12M8.5 8a2.5 2.5 0 1 1 3.5-2.3A2.5 2.5 0 1 1 15.5 8z"/></svg>';
+const ICON_SHIELD =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 7.7-7 9.2-4-1.5-7-4.6-7-9.2V6z"/><path d="M9.3 11.8l2 2 3.4-3.9"/></svg>';
 
 function escapeHtml(text) {
   return String(text)
@@ -1855,6 +1855,8 @@ function escapeHtml(text) {
 
 /* ---------- профиль ---------- */
 
+var profileTab = "main";
+
 function openProfile() {
   const backdrop = $("#profile-backdrop");
   const count = lessonCount(state.group);
@@ -1863,30 +1865,28 @@ function openProfile() {
   const canReview = role === "owner" || role === "editor";
   const pendingCount = Object.keys(pendingMap).length;
 
+  /* После входа — карточка-«герой» с аватаркой, именем и бейджем роли. */
+  let heroBlock = "";
   let accountBlock = "";
   if (tgSession) {
-    const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "участник";
+    const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "студент";
     const avatarInner = tgSession.photo_url
       ? '<img src="' + escapeHtml(String(tgSession.photo_url)) + '" alt="">'
       : "<b>" + escapeHtml((tgDisplayName(tgSession) || "?").trim().charAt(0).toUpperCase() || "?") + "</b>";
-    accountBlock = `
-      <div class="weekly-profile-group">
-        <div class="weekly-profile-group-heading"><span>аккаунт telegram</span></div>
-        <div class="weekly-profile-account">
-          <span class="weekly-profile-avatar">${avatarInner}</span>
-          <span class="weekly-profile-account-text">
-            <strong>${escapeHtml(tgDisplayName(tgSession))}</strong>
-            <small>${roleLabel}${tgSession.username ? " · @" + escapeHtml(String(tgSession.username)) : ""}</small>
-            ${role === "user" ? "<small>мой id: " + escapeHtml(String(tgSession.id)) + " — назови его владельцу для прав редактора</small>" : ""}
-          </span>
-          <button type="button" class="weekly-profile-mini" data-act="tg-logout">выйти</button>
-        </div>
-        ${
-          canReview
-            ? `<button type="button" class="weekly-profile-manage" data-act="tg-manage"><span>заявки и редакторы</span>${pendingCount ? '<b class="weekly-profile-count">' + pendingCount + "</b>" : ""}${ICON_CHEVRON}</button>`
-            : ""
-        }
-      </div>`;
+    heroBlock = `
+    <div class="weekly-profile-hero">
+      <span class="weekly-profile-hero-avatar">${avatarInner}</span>
+      <strong class="weekly-profile-hero-name">${escapeHtml(tgDisplayName(tgSession))}</strong>
+      ${tgSession.username ? '<span class="weekly-profile-hero-username">@' + escapeHtml(String(tgSession.username)) + "</span>" : ""}
+      <span class="weekly-profile-hero-role is-${role}">${ICON_SHIELD}<span>${roleLabel}</span></span>
+      ${role === "user" ? '<small class="weekly-profile-hero-id">мой id: ' + escapeHtml(String(tgSession.id)) + " — назови его владельцу для прав редактора</small>" : ""}
+      <div class="weekly-profile-hero-actions">
+        <button type="button" class="weekly-profile-mini" data-act="tg-logout">выйти</button>
+      </div>
+    </div>`;
+    accountBlock = canReview
+      ? `<div class="weekly-profile-group"><button type="button" class="weekly-profile-manage" data-act="tg-manage"><span>заявки и редакторы</span>${pendingCount ? '<b class="weekly-profile-count">' + pendingCount + "</b>" : ""}${ICON_CHEVRON}</button></div>`
+      : "";
   } else {
     accountBlock = `
       <div class="weekly-profile-group">
@@ -1913,22 +1913,7 @@ function openProfile() {
           <button class="weekly-setting-switch" type="button" data-npref="${key}" aria-pressed="${prefs[key] ? "true" : "false"}" aria-label="${title}"><span aria-hidden="true"></span></button>
         </div>`;
 
-  backdrop.innerHTML = `<div class="weekly-profile">
-    <div class="weekly-profile-header">
-      <button type="button" data-act="close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
-        назад
-      </button>
-      <h1>профиль</h1>
-      <span></span>
-    </div>
-    <div class="weekly-profile-identity">
-      <div>
-        <h2>${groupName()}</h2>
-        <p>${count} ${plural(count, "пара", "пары", "пар")} в неделю</p>
-      </div>
-    </div>
-    <div class="weekly-profile-content">
+  const mainContent = `
       ${accountBlock}
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>учебная группа</span></div>
@@ -1936,15 +1921,55 @@ function openProfile() {
           <select id="profile-group">${groupOptions(state.group)}</select>
           ${ICON_CHEVRON}
         </div>
-        <div class="weekly-profile-pending-schedule">${ICON_CAL}<span><strong>выбор сохраняется</strong><small>группа и настройки хранятся в этом браузере</small></span></div>
       </div>
+      <div class="weekly-profile-group">
+        <button class="weekly-settings-row" type="button" data-act="notifs-tab">
+          <span class="weekly-settings-row-main">
+            <span class="weekly-settings-icon is-theme">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+            </span>
+            <span class="weekly-settings-copy">
+              <strong>уведомления</strong>
+              <span>колокольчик и telegram-бот</span>
+            </span>
+          </span>
+          ${ICON_CHEVRON}
+        </button>
+      </div>`;
+
+  const notifsContent = `
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>уведомления</span></div>
         ${npref("swaps", "замены и отмены", "в колокольчике и в telegram")}
         ${npref("schedule", "обновления расписания", "когда парсер присылает новое")}
         ${npref("pending", "заявки на проверку", "для владельца и редакторов")}
-        ${npref("telegram", "дублировать в telegram", TELEGRAM_BOT_NAME ? "бот @" + TELEGRAM_BOT_NAME + " — сначала нажми у него /start" : "личные сообщения от бота")}
+        ${npref("telegram", "дублировать в telegram", TELEGRAM_BOT_NAME ? "бот @" + TELEGRAM_BOT_NAME : "личные сообщения от бота")}
       </div>
+      <p class="weekly-profile-notifs-hint">бот напишет тебе только после твоего /start — телеграм не даёт ему писать первым</p>`;
+
+  const isNotifs = profileTab === "notifs";
+  backdrop.innerHTML = `<div class="weekly-profile">
+    <div class="weekly-profile-header">
+      <button type="button" data-act="back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+        назад
+      </button>
+      <h1>${isNotifs ? "уведомления" : "профиль"}</h1>
+      <span></span>
+    </div>
+    ${
+      isNotifs
+        ? ""
+        : heroBlock +
+          `<div class="weekly-profile-identity">
+      <div>
+        <h2>${groupName()}</h2>
+        <p>${count} ${plural(count, "пара", "пары", "пар")} в неделю</p>
+      </div>
+    </div>`
+    }
+    <div class="weekly-profile-content">
+      ${isNotifs ? notifsContent : mainContent}
     </div>
     <div class="weekly-profile-footer">
       <button type="button" data-act="close">готово</button>
@@ -1960,6 +1985,8 @@ function closeProfile() {
   backdrop.hidden = true;
   backdrop.innerHTML = "";
   state.profileOpen = false;
+  profileTab = "main";
+  closeTgMemo();
 }
 
 /* ---------- онбординг ---------- */
@@ -2074,7 +2101,15 @@ function bindExtra() {
     const act = e.target.closest("[data-act]");
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
-    else if (act.dataset.act === "tg-logout") {
+    else if (act.dataset.act === "back") {
+      if (profileTab === "notifs") {
+        profileTab = "main";
+        openProfile();
+      } else closeProfile();
+    } else if (act.dataset.act === "notifs-tab") {
+      profileTab = "notifs";
+      openProfile();
+    } else if (act.dataset.act === "tg-logout") {
       tgLogout();
       openProfile();
     } else if (act.dataset.act === "tg-manage") {
@@ -3232,7 +3267,7 @@ function renderAccountRow() {
   if (tgSession) {
     title.textContent = tgDisplayName(tgSession);
     const role = myRole();
-    const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "участник";
+    const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "студент";
     if (hint) hint.textContent = roleLabel + (tgSession.username ? " · @" + tgSession.username : "");
     if (icon && tgSession.photo_url)
       icon.innerHTML = '<img class="weekly-account-avatar" src="' + escapeHtml(String(tgSession.photo_url)) + '" alt="">';
@@ -3302,7 +3337,7 @@ function renderTgSheetBody() {
     return;
   }
   const role = myRole();
-  const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "участник";
+  const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "студент";
   let html =
     '<div class="weekly-replace-head"><strong>' + escapeHtml(tgDisplayName(tgSession)) + "</strong><span>" + roleLabel + "</span></div>";
   if (role === "user")
@@ -3427,14 +3462,58 @@ function toggleNotifPref(key, el) {
     toast("сначала войди через Telegram — кнопка тут же, в профиле");
     return;
   }
+  if (key === "telegram" && !p.telegram) {
+    /* Памятка перед включением: бот не может написать первым,
+       пока человек не нажал у него /start. */
+    showTgMemo(() => {
+      p.telegram = true;
+      saveNotifPrefs();
+      if (el) el.setAttribute("aria-pressed", "true");
+      syncTgSub().then((ok) => {
+        if (p.telegram) toast(ok ? "бот пришлёт уведомления лично" : "не получилось — проверь интернет");
+      });
+    });
+    return;
+  }
   p[key] = !p[key];
   saveNotifPrefs();
   if (el) el.setAttribute("aria-pressed", p[key] ? "true" : "false");
-  if (key === "telegram")
-    syncTgSub().then((ok) => {
-      if (p.telegram) toast(ok ? "бот пришлёт уведомления лично" : "не получилось — проверь интернет");
-    });
+  if (key === "telegram") syncTgSub();
   else if (p.telegram) syncTgSub();
+}
+
+/* Памятка про /start при включении дублирования в Telegram. */
+function showTgMemo(onConfirm) {
+  closeTgMemo();
+  const bot = TELEGRAM_BOT_NAME ? "@" + TELEGRAM_BOT_NAME : "этому боту";
+  const wrap = document.createElement("div");
+  wrap.className = "weekly-tg-memo-backdrop";
+  wrap.id = "tg-memo";
+  wrap.innerHTML =
+    '<div class="weekly-tg-memo" role="dialog" aria-label="памятка про телеграм-бота">' +
+    '<span class="weekly-tg-memo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.9 4.6c.3-1.1-.8-2-1.9-1.6L2.6 10.4c-1 .4-.9 1.7.1 2l4.2 1.4 1.6 5c.3.9 1.4 1.1 2 .4l2.2-2.6 4 3c.7.5 1.8.1 2-.8l2.6-14.6z"/><path d="M7 14.5 18 6"/></svg></span>' +
+    "<strong>сначала напиши " + escapeHtml(bot) + " /start</strong>" +
+    "<p>телеграм не разрешает боту писать первым. открой " + escapeHtml(bot) + ' и нажми «старт» — иначе уведомления до тебя не дойдут.</p>' +
+    '<div class="weekly-tg-memo-actions">' +
+    (TELEGRAM_BOT_NAME ? '<a href="https://t.me/' + escapeHtml(TELEGRAM_BOT_NAME) + '" target="_blank" rel="noopener noreferrer">открыть бота</a>' : "") +
+    '<button type="button" class="is-primary">понятно</button>' +
+    "</div></div>";
+  document.body.appendChild(wrap);
+  wrap.addEventListener("click", (e) => {
+    if (e.target === wrap) {
+      closeTgMemo();
+      return;
+    }
+    if (e.target.closest("button.is-primary")) {
+      closeTgMemo();
+      if (onConfirm) onConfirm();
+    }
+  });
+}
+
+function closeTgMemo() {
+  const el = document.getElementById("tg-memo");
+  if (el) el.remove();
 }
 
 /* Подписка на личные уведомления в Telegram: запись уходит в weeqo-tg-subs,

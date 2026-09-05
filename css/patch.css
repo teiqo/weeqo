@@ -2459,17 +2459,184 @@ a.weekly-settings-row.weekly-settings-link strong {
 
 /* --- аватарка вместо шестерёнки и аккаунт в настройках --- */
 .weekly-settings-trigger .weekly-trigger-avatar {
-  width: 28px;
-  height: 28px;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   object-fit: cover;
   display: none;
+}
+.weekly-settings-trigger.is-avatar {
+  padding: 2px;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--weekly-raised), var(--weekly-raised)) padding-box,
+    linear-gradient(150deg, #a55bff, #2e9bff) border-box;
 }
 .weekly-settings-trigger.is-avatar .weekly-trigger-avatar {
   display: block;
 }
 .weekly-settings-trigger.is-avatar > svg {
   display: none;
+}
+.weekly-settings.is-open .weekly-settings-trigger.is-avatar {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--weekly-raised), var(--weekly-raised)) padding-box,
+    linear-gradient(150deg, #a55bff, #2e9bff) border-box;
+  color: var(--weekly-text);
+}
+
+/* --- профиль: «герой» аккаунта после входа через Telegram --- */
+.weekly-profile-hero {
+  display: flex;
+  padding: 14px 20px 4px;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.weekly-profile-hero-avatar {
+  display: grid;
+  width: 84px;
+  height: 84px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #58c7ff, #1689ec);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--weekly-blue) 26%, transparent);
+  color: #fff;
+}
+.weekly-profile-hero-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.weekly-profile-hero-avatar b {
+  font-size: 32px;
+}
+.weekly-profile-hero-name {
+  margin-top: 12px;
+  font-size: 19px;
+}
+.weekly-profile-hero-username {
+  margin-top: 2px;
+  color: var(--weekly-secondary);
+  font-size: 13px;
+}
+.weekly-profile-hero-role {
+  display: inline-flex;
+  margin-top: 10px;
+  padding: 4px 11px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--weekly-green) 16%, transparent);
+  color: var(--weekly-green);
+  font-size: 12px;
+  font-weight: 700;
+}
+.weekly-profile-hero-role svg {
+  width: 13px;
+  height: 13px;
+}
+.weekly-profile-hero-role.is-editor {
+  background: color-mix(in srgb, var(--weekly-blue) 14%, transparent);
+  color: var(--weekly-blue);
+}
+.weekly-profile-hero-role.is-owner {
+  background: color-mix(in srgb, #b884ff 18%, transparent);
+  color: #b884ff;
+}
+.weekly-profile-hero-id {
+  margin-top: 8px;
+  max-width: 300px;
+  color: var(--weekly-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.weekly-profile-hero-actions {
+  margin-top: 12px;
+}
+
+/* --- профиль: подсказка на вкладке уведомлений --- */
+.weekly-profile-notifs-hint {
+  margin: 0 6px;
+  color: var(--weekly-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* --- памятка про /start боту --- */
+.weekly-tg-memo-backdrop {
+  position: fixed;
+  z-index: 460;
+  inset: 0;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  background: #00000047;
+  animation: weekly-profile-backdrop-in 0.18s ease-out both;
+}
+.weekly-tg-memo {
+  width: min(100%, 320px);
+  padding: 22px 18px 14px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--weekly-raised) 97%, var(--weekly-bg));
+  box-shadow: 0 18px 48px #0000003d;
+  color: var(--weekly-text);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  text-align: center;
+  animation: weekly-profile-in 0.24s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.weekly-tg-memo-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 10px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--weekly-blue) 13%, transparent);
+  color: var(--weekly-blue);
+}
+.weekly-tg-memo-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.weekly-tg-memo strong {
+  font-size: 16px;
+}
+.weekly-tg-memo p {
+  margin: 7px 0 0;
+  color: var(--weekly-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.weekly-tg-memo-actions {
+  display: flex;
+  margin-top: 16px;
+  gap: 8px;
+}
+.weekly-tg-memo-actions a,
+.weekly-tg-memo-actions button {
+  display: inline-flex;
+  min-height: 44px;
+  padding: 0 12px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 12px;
+  background: var(--weekly-fill);
+  color: var(--weekly-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.weekly-tg-memo-actions .is-primary {
+  background: var(--weekly-blue);
+  color: #fff;
 }
 .weekly-account-row .weekly-settings-icon.is-account {
   overflow: hidden;
