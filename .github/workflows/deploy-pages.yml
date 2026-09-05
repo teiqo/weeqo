@@ -3,11 +3,6 @@ name: deploy pages
 on:
   push:
   workflow_dispatch:
-  # передеплой после того, как парсер закоммитил свежее расписание
-  # (push из Actions сам по себе новый запуск не вызывает)
-  workflow_run:
-    workflows: ["update-schedule"]
-    types: [completed]
 
 permissions:
   pages: write
@@ -26,32 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: check environment values
-        env:
-          SHARED_SWAPS_URL: ${{ vars.SHARED_SWAPS_URL || secrets.SHARED_SWAPS_URL }}
-          TELEGRAM_BOT_NAME: ${{ vars.TELEGRAM_BOT_NAME || secrets.TELEGRAM_BOT_NAME }}
-          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-          TELEGRAM_BOT_TOKEN_SHA256: ${{ secrets.TELEGRAM_BOT_TOKEN_SHA256 }}
-        run: |
-          missing=""
-          for name in SHARED_SWAPS_URL FIREBASE_API_KEY TELEGRAM_BOT_NAME TELEGRAM_BOT_TOKEN_SHA256; do
-            val=$(printenv "$name")
-            if [ -z "$val" ]; then
-              echo "❌ $name — пусто или не задано"
-              missing="$missing $name"
-            else
-              echo "✅ $name — задано (${#val} символов)"
-            fi
-          done
-          if [ -n "$missing" ]; then
-            echo "::error::В окружении github-pages не хватает:$missing. Имена без опечаток, затем Run workflow заново."
-            exit 1
-          fi
-
       - name: build js/config.js from environment
         env:
-          SHARED_SWAPS_URL: ${{ vars.SHARED_SWAPS_URL || secrets.SHARED_SWAPS_URL }}
-          TELEGRAM_BOT_NAME: ${{ vars.TELEGRAM_BOT_NAME || secrets.TELEGRAM_BOT_NAME }}
+          SHARED_SWAPS_URL: ${{ vars.SHARED_SWAPS_URL }}
+          TELEGRAM_BOT_NAME: ${{ vars.TELEGRAM_BOT_NAME }}
+          TELEGRAM_BOT_ID: ${{ vars.TELEGRAM_BOT_ID }}
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           TELEGRAM_BOT_TOKEN_SHA256: ${{ secrets.TELEGRAM_BOT_TOKEN_SHA256 }}
         run: |
@@ -60,9 +34,10 @@ jobs:
             "var SHARED_SWAPS_URL = \"${SHARED_SWAPS_URL}\";" \
             "var FIREBASE_API_KEY = \"${FIREBASE_API_KEY}\";" \
             "var TELEGRAM_BOT_NAME = \"${TELEGRAM_BOT_NAME}\";" \
+            "var TELEGRAM_BOT_ID = \"${TELEGRAM_BOT_ID}\";" \
             "var TELEGRAM_BOT_TOKEN_SHA256 = \"${TELEGRAM_BOT_TOKEN_SHA256}\";" \
             > js/config.js
-          echo "config.js собран"
+          grep -c '^var ' js/config.js
 
       - name: stage site (без служебных файлов)
         run: |
