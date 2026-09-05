@@ -2814,7 +2814,10 @@ window.onTelegramAuth = function (payload) {
     updateTgButton();
     renderTgSheetBody();
     toast("привет, " + tgDisplayName(payload) + "!");
-    tgSyncRoles().then(pullSharedSwaps);
+    tgSyncRoles().then(() => {
+      pullSharedSwaps();
+      if (loadNotifPrefs().telegram) syncTgSub();
+    });
   });
 };
 
@@ -2837,7 +2840,7 @@ function swapAccessHint() {
   if (!tgConfigured() || !sharedSwapsEnabled()) return "";
   const role = myRole();
   if (role === "anon") {
-    return '<p class="weekly-replace-hint">сохранится только на этом устройстве. войди через Telegram (кнопка в шапке) — замена уйдёт редактору на проверку и станет общей</p>';
+    return '<p class="weekly-replace-hint">сохранится только на этом устройстве. войди через Telegram (шестерёнка → аккаунт) — замена уйдёт редактору на проверку и станет общей</p>';
   }
   if (role === "user") {
     return '<p class="weekly-replace-hint">у тебя применится сразу, всем остальным — после проверки редактором</p>';
@@ -3121,21 +3124,56 @@ async function pullSharedSwaps() {
 /* ---------- окно Telegram: вход, заявки, редакторы ---------- */
 
 function updateTgButton() {
-  const btn = document.getElementById("tg-btn");
-  if (!btn) return;
-  if (!tgConfigured() || !sharedSwapsEnabled()) {
-    btn.hidden = true;
-    return;
-  }
-  btn.hidden = false;
-  btn.classList.toggle("is-auth", Boolean(tgSession));
-  btn.setAttribute("aria-label", tgSession ? "аккаунт: " + tgDisplayName(tgSession) : "войти через Telegram");
+  /* Кнопки TG в шапке больше нет: вход живёт в настройках (строка аккаунта),
+     а шестерёнка после входа становится аватаркой. */
+  updateSettingsAvatar();
+  renderAccountRow();
   const badge = document.getElementById("tg-badge");
   if (badge) {
     const count = Object.keys(pendingMap).length;
     const canReview = myRole() === "owner" || myRole() === "editor";
     badge.hidden = !(canReview && count > 0);
     badge.textContent = String(count);
+  }
+}
+
+/* Аватар из Telegram вместо шестерёнки настроек. */
+function updateSettingsAvatar() {
+  const trigger = document.getElementById("settings-trigger");
+  if (!trigger) return;
+  const url = tgSession && tgSession.photo_url ? String(tgSession.photo_url) : "";
+  let img = trigger.querySelector("img.weekly-trigger-avatar");
+  if (url) {
+    if (!img) {
+      img = document.createElement("img");
+      img.className = "weekly-trigger-avatar";
+      img.alt = "";
+      trigger.appendChild(img);
+    }
+    if (img.getAttribute("src") !== url) img.setAttribute("src", url);
+    trigger.classList.add("is-avatar");
+  } else {
+    if (img) img.remove();
+    trigger.classList.remove("is-avatar");
+  }
+}
+
+/* Строка аккаунта в самом верху настроек. */
+function renderAccountRow() {
+  const title = document.getElementById("account-title");
+  if (!title) return;
+  const hint = document.getElementById("account-hint");
+  const icon = document.getElementById("account-icon");
+  if (tgSession) {
+    title.textContent = tgDisplayName(tgSession);
+    const role = myRole();
+    const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "участник";
+    if (hint) hint.textContent = roleLabel + (tgSession.username ? " · @" + tgSession.username : "");
+    if (icon && tgSession.photo_url)
+      icon.innerHTML = '<img class="weekly-account-avatar" src="' + escapeHtml(String(tgSession.photo_url)) + '" alt="">';
+  } else {
+    title.textContent = "войти через Telegram";
+    if (hint) hint.textContent = tgConfigured() ? "замены уйдут редактору на проверку" : "вход не настроен";
   }
 }
 
@@ -3240,7 +3278,10 @@ function renderTgSheetBody() {
 
 function openTgSheet() {
   closeTgSheet();
-  if (!tgConfigured()) return;
+  if (!tgConfigured()) {
+    toast("вход через Telegram не настроен");
+    return;
+  }
   const backdrop = document.createElement("div");
   backdrop.id = "tg-backdrop";
   backdrop.className = "weekly-replace-backdrop";
@@ -3290,6 +3331,48 @@ var NOTIF_SEEN_SCHEDULE_KEY = "weekly:notif-seen-schedule:v1";
 var NOTIF_SEEN_PENDING_KEY = "weekly:notif-seen-pending:v1";
 var notifList = null;
 
+/* Настройки уведомлений: что показывать в колокольчике и дублировать в Telegram. */
+var NOTIF_PREFS_KEY = "weekly:notif-prefs:v1";
+var notifPrefs = null;
+
+function loadNotifPrefs() {
+  if (notifPrefs) return notifPrefs;
+  notifPrefs = { swaps: true, schedule: true, pending: true, telegram: false };
+  try {
+    const raw = localStorage.getItem(NOTIF_PREFS_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data && typeof data === "object")
+        for (const k in notifPrefs) if (typeof data[k] === "boolean") notifPrefs[k] = data[k];
+    }
+  } catch (e) {}
+  return notifPrefs;
+}
+
+function saveNotifPrefs() {
+  try {
+    localStorage.setItem(NOTIF_PREFS_KEY, JSON.stringify(notifPrefs));
+  } catch (e) {}
+}
+
+/* Подписка на личные уведомления в Telegram: запись уходит в weeqo-tg-subs,
+   а рассылает бот через GitHub Action (tools/notify_telegram.py). Перед
+   включением человек жмёт /start у бота — иначе TG не даёт написать первым. */
+async function syncTgSub() {
+  if (!tgSession || !sharedSwapsEnabled() || !tgConfigured()) return false;
+  const prefs = loadNotifPrefs();
+  const path = "weeqo-tg-subs/" + tgSession.id;
+  if (!prefs.telegram) return cloudWrite(path, null);
+  const role = myRole();
+  return cloudWrite(path, {
+    name: tgDisplayName(tgSession),
+    swaps: !!prefs.swaps,
+    schedule: !!prefs.schedule,
+    pending: !!(prefs.pending && (role === "owner" || role === "editor")),
+    updatedAt: Date.now(),
+  });
+}
+
 function loadNotifs() {
   if (notifList) return;
   notifList = [];
@@ -3313,7 +3396,9 @@ function saveNotifs() {
   }
 }
 
-function pushNotif(text) {
+function pushNotif(text, kind) {
+  const prefs = loadNotifPrefs();
+  if (kind && prefs[kind] === false) return;
   loadNotifs();
   notifList.unshift({ text: text, at: Date.now(), read: false });
   if (notifList.length > 50) notifList.length = 50;
@@ -3374,7 +3459,7 @@ function notifyAboutRemoteSwaps(remote) {
     seen[key] = t;
     changed = true;
     if (!firstRun && key.indexOf(gprefix) === 0 && (!myId || String(entry.by || "") !== myId)) {
-      pushNotif(describeSwapForNotif(key, entry));
+      pushNotif(describeSwapForNotif(key, entry), "swaps");
     }
   }
   if (changed) {
@@ -3406,7 +3491,7 @@ function notifyAboutPending() {
   });
   if (!firstRun) {
     Object.keys(nowMap).forEach(function (enc) {
-      if (!(enc in seen)) pushNotif("заявка · " + describeSwapForNotif(decodeSwapKey(enc), pendingMap[enc] || {}));
+      if (!(enc in seen)) pushNotif("заявка · " + describeSwapForNotif(decodeSwapKey(enc), pendingMap[enc] || {}), "pending");
     });
   }
   try {
@@ -3419,7 +3504,7 @@ function notifyAboutScheduleStamp(updatedAt) {
   if (!updatedAt) return;
   try {
     var prev = localStorage.getItem(NOTIF_SEEN_SCHEDULE_KEY);
-    if (prev && prev !== updatedAt) pushNotif("обновились пары — базовое расписание обновлено");
+    if (prev && prev !== updatedAt) pushNotif("обновились пары — базовое расписание обновлено", "schedule");
     localStorage.setItem(NOTIF_SEEN_SCHEDULE_KEY, updatedAt);
   } catch (e) {}
 }
@@ -3632,6 +3717,45 @@ function manualRefresh(btn) {
   const btn = document.getElementById("bell-btn");
   if (btn) btn.addEventListener("click", openBellSheet);
   updateBellButton();
+})();
+
+(function initAccountRow() {
+  const acc = document.getElementById("go-account");
+  if (acc)
+    acc.addEventListener("click", () => {
+      closeSettings();
+      openTgSheet();
+    });
+  const defs = [
+    ["notif-swaps-switch", "swaps"],
+    ["notif-schedule-switch", "schedule"],
+    ["notif-pending-switch", "pending"],
+    ["notif-tg-switch", "telegram"],
+  ];
+  const prefs = loadNotifPrefs();
+  defs.forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute("aria-pressed", prefs[key] ? "true" : "false");
+    el.addEventListener("click", () => {
+      const p = loadNotifPrefs();
+      if (key === "telegram" && !p.telegram && !tgSession) {
+        toast("сначала войди через Telegram — строка аккаунта сверху");
+        return;
+      }
+      p[key] = !p[key];
+      saveNotifPrefs();
+      el.setAttribute("aria-pressed", p[key] ? "true" : "false");
+      if (key === "telegram")
+        syncTgSub().then((ok) => {
+          if (p.telegram) toast(ok ? "бот пришлёт уведомления лично" : "не получилось — проверь интернет");
+        });
+      else if (p.telegram) syncTgSub();
+    });
+  });
+  const tgHint = document.getElementById("notif-tg-hint");
+  if (tgHint && TELEGRAM_BOT_NAME) tgHint.textContent = "бот @" + TELEGRAM_BOT_NAME + " — сначала нажми у него /start";
+  renderAccountRow();
 })();
 
 (function startSharedSwaps() {

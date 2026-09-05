@@ -2456,3 +2456,29 @@ a.weekly-settings-row.weekly-settings-link strong {
 .weekly-tg-add button:active {
   transform: scale(0.97);
 }
+
+/* --- аватарка вместо шестерёнки и аккаунт в настройках --- */
+.weekly-settings-trigger .weekly-trigger-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: none;
+}
+.weekly-settings-trigger.is-avatar .weekly-trigger-avatar {
+  display: block;
+}
+.weekly-settings-trigger.is-avatar > svg {
+  display: none;
+}
+.weekly-account-row .weekly-settings-icon.is-account {
+  overflow: hidden;
+  border-radius: 50%;
+}
+.weekly-account-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
