@@ -1857,8 +1857,8 @@ function escapeHtml(text) {
 
 /* ---------- профиль ---------- */
 
-/* Список тумблеров уведомлений в профиле раскрыт по умолчанию. */
-var profileNotifsOpen = true;
+/* Список тумблеров уведомлений в профиле свёрнут по умолчанию. */
+var profileNotifsOpen = false;
 
 function openProfile() {
   const backdrop = $("#profile-backdrop");
@@ -1882,7 +1882,7 @@ function openProfile() {
       <strong class="weekly-profile-hero-name">${escapeHtml(tgDisplayName(tgSession))}</strong>
       ${tgSession.username ? '<span class="weekly-profile-hero-username">@' + escapeHtml(String(tgSession.username)) + "</span>" : ""}
       <span class="weekly-profile-hero-role is-${role}">${ICON_SHIELD}<span>${roleLabel}</span></span>
-      ${role === "user" ? '<small class="weekly-profile-hero-id">мой id: ' + escapeHtml(String(tgSession.id)) + " — назови его владельцу для прав редактора</small>" : ""}
+      ${role === "user" ? '<button type="button" class="weekly-profile-hero-id is-copy" data-act="copy-id" data-id="' + escapeHtml(String(tgSession.id)) + '" title="нажми, чтобы скопировать">мой id: <b>' + escapeHtml(String(tgSession.id)) + "</b></button>" : ""}
       <div class="weekly-profile-hero-actions">
         <button type="button" class="weekly-profile-mini" data-act="tg-logout">выйти</button>
       </div>
@@ -2108,6 +2108,7 @@ function bindExtra() {
     const act = e.target.closest("[data-act]");
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
+    else if (act.dataset.act === "copy-id") copyTextToClipboard(act.dataset.id || "");
     else if (act.dataset.act === "tg-login") {
       /* Красивая кнопка есть только при настроенном Client ID — открываем
          страницу входа Telegram (OIDC-попап). */
@@ -2572,12 +2573,12 @@ function scheduleModule() {
 function scheduleStamp(payload) {
   if (payload && payload.updatedAt) {
     notifyAboutScheduleStamp(payload.updatedAt);
-    scheduleUpdatedAt = payload.updatedAt;
+    scheduleUpdatedAt = payload.checkedAt || payload.updatedAt;
   }
   renderDataStamp();
   const el = $("#freshness");
-  if (!el || !payload || !payload.updatedAt) return;
-  const when = new Date(payload.updatedAt);
+  if (!el || !payload || !(payload.checkedAt || payload.updatedAt)) return;
+  const when = new Date(payload.checkedAt || payload.updatedAt);
   if (Number.isNaN(when.getTime())) return;
   const hh = String(when.getHours()).padStart(2, "0");
   const mm = String(when.getMinutes()).padStart(2, "0");
@@ -3404,6 +3405,32 @@ async function revokeEditor(tgId) {
   renderTgSheetBody();
 }
 
+/* Копирование telegram id в буфер: современный API + запасной через textarea. */
+function copyTextToClipboard(text) {
+  const done = () => toast("id скопирован");
+  const fallback = () => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      done();
+    } catch (e) {
+      toast("не скопировалось — id: " + text);
+    }
+    ta.remove();
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, fallback);
+  } else {
+    fallback();
+  }
+}
+
 /* ---------- тосты ---------- */
 var toastTimer = null;
 function toast(text) {
@@ -3576,9 +3603,11 @@ function renderTgSheetBody() {
     '<div class="weekly-replace-head"><strong>' + escapeHtml(tgDisplayName(tgSession)) + "</strong><span>" + roleLabel + "</span></div>";
   if (role === "user")
     html +=
-      '<p class="weekly-replace-hint">мой id: ' +
+      '<p class="weekly-replace-hint"><button type="button" class="weekly-tg-copy-id" data-tg="copy-id" data-id="' +
       escapeHtml(String(tgSession.id)) +
-      " — назови его владельцу, чтобы получить права редактора</p>";
+      '" title="нажми, чтобы скопировать">мой id: <b>' +
+      escapeHtml(String(tgSession.id)) +
+      "</b></button></p>";
   if (role === "owner" || role === "editor") {
     const keys = Object.keys(pendingMap).sort((a, b) => (pendingMap[b].updatedAt || 0) - (pendingMap[a].updatedAt || 0));
     html += '<div class="weekly-tg-section"><span>заявки (' + keys.length + ")</span>";
@@ -3601,7 +3630,7 @@ function renderTgSheetBody() {
     html +=
       '<div class="weekly-tg-add"><input type="text" inputmode="numeric" id="tg-add-editor-id" placeholder="id редактора" autocomplete="off">' +
       '<button type="button" data-tg="add-editor">добавить</button></div>' +
-      '<p class="weekly-replace-hint">id виден в окне входа у человека (строка «мой id»). редактор проверяет заявки, а его замены уходят всем сразу.</p>';
+      '<p class="weekly-replace-hint">человек видит свой id у себя в профиле — строка «мой id», по тапу копируется. редактор проверяет заявки, а его замены уходят всем сразу.</p>';
     html += "</div>";
   }
   html +=
@@ -3612,7 +3641,9 @@ function renderTgSheetBody() {
 
 function openTgSheet() {
   closeTgSheet();
-  if (!tgConfigured()) {
+  /* Шторка нужна и вошедшим (заявки/редакторы), пускаем при живой
+     сессии или настроенном OIDC, а не только при старом виджете. */
+  if (!tgConfigured() && !TELEGRAM_BOT_ID && !tgSession) {
     toast("вход через Telegram не настроен");
     return;
   }
@@ -3632,6 +3663,7 @@ function openTgSheet() {
     if (!el) return;
     const act = el.dataset.tg;
     if (act === "close") closeTgSheet();
+    else if (act === "copy-id") copyTextToClipboard(el.dataset.id || "");
     else if (act === "oidc-login") startOidcLogin();
     else if (act === "logout") {
       tgLogout();
@@ -3720,15 +3752,15 @@ function toggleNotifPref(key, el) {
 /* Памятка про /start при включении дублирования в Telegram. */
 function showTgMemo(onConfirm) {
   closeTgMemo();
-  const bot = TELEGRAM_BOT_NAME ? "@" + TELEGRAM_BOT_NAME : "этому боту";
+  const bot = "@" + (TELEGRAM_BOT_NAME || "weeqobot");
   const wrap = document.createElement("div");
   wrap.className = "weekly-tg-memo-backdrop";
   wrap.id = "tg-memo";
   wrap.innerHTML =
     '<div class="weekly-tg-memo" role="dialog" aria-label="памятка про телеграм-бота">' +
     '<span class="weekly-tg-memo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.9 4.6c.3-1.1-.8-2-1.9-1.6L2.6 10.4c-1 .4-.9 1.7.1 2l4.2 1.4 1.6 5c.3.9 1.4 1.1 2 .4l2.2-2.6 4 3c.7.5 1.8.1 2-.8l2.6-14.6z"/><path d="M7 14.5 18 6"/></svg></span>' +
-    "<strong>сначала напиши " + escapeHtml(bot) + " /start</strong>" +
-    "<p>телеграм не разрешает боту писать первым. открой " + escapeHtml(bot) + ' и нажми «старт» — иначе уведомления до тебя не дойдут.</p>' +
+    "<strong>напиши боту " + escapeHtml(bot) + " в телеграме /start</strong>" +
+    "<p>телеграм не разрешает боту писать первым. открой " + escapeHtml(bot) + ' и напиши любое сообщение — иначе уведомления до тебя не дойдут.</p>' +
     '<div class="weekly-tg-memo-actions">' +
     (TELEGRAM_BOT_NAME ? '<a href="https://t.me/' + escapeHtml(TELEGRAM_BOT_NAME) + '" target="_blank" rel="noopener noreferrer">открыть бота</a>' : "") +
     '<button type="button" class="is-primary">понятно</button>' +

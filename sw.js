@@ -42,11 +42,7 @@ self.addEventListener("fetch", (event) => {
     event.request.url.indexOf("data/changelog.json") !== -1 ||
     event.request.url.indexOf("js/config.js") !== -1
   ) {
-    event.respondWith(
-      fetch(event.request).catch(() =>
-        caches.match(event.request).then((r) => r || new Response(null, { status: 503 }))
-      )
-    );
+    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
     return;
   }
   /* Облако с заменами, auth-токены и виджет Telegram не кешируем.

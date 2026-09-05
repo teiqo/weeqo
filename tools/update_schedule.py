@@ -597,13 +597,22 @@ def main():
         json.dumps(groups, ensure_ascii=False, sort_keys=True)
         != json.dumps(old_groups_list, ensure_ascii=False, sort_keys=True)
     )
+    now_iso = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
     if not changed:
-        print("без изменений: групп %d, пар %d" % (len(groups), total))
+        # Контент тот же: updatedAt (дата смены расписания) не трогаем,
+        # но обновляем checkedAt — штамп на сайте покажет свежую проверку.
+        payload = dict(old)
+        payload["updatedAt"] = old.get("updatedAt") or now_iso
+        payload["checkedAt"] = now_iso
+        with open(OUT, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=1, sort_keys=False)
+            fh.write("\n")
+        print("без изменений: групп %d, пар %d — обновлён checkedAt" % (len(groups), total))
         return 0
 
-    now_iso = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
     payload = {
         "updatedAt": now_iso,
+        "checkedAt": now_iso,
         "source": PDF_URL,
         "groups": groups,
     }

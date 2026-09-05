@@ -2735,12 +2735,6 @@ a.weekly-settings-row.weekly-settings-link strong {
   justify-items: stretch;
   gap: 10px;
 }
-.weekly-profile-auth-wrap {
-  position: relative;
-  width: 100%;
-  overflow: hidden;
-  border-radius: 16px;
-}
 .weekly-profile-auth-btn {
   display: flex;
   width: 100%;
@@ -2795,22 +2789,15 @@ a.weekly-settings-row.weekly-settings-link strong {
   flex: 0 0 auto;
   color: var(--weekly-tertiary);
 }
-.weekly-profile-auth-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.weekly-profile-auth-legacy {
+  display: grid;
+  min-height: 40px;
+  justify-items: center;
 }
-.weekly-profile-auth-overlay iframe {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  opacity: 0.01;
-  cursor: pointer;
-  pointer-events: auto;
-  transform: translate(-50%, -50%) scale(2);
+.weekly-profile-auth-legacy iframe {
+  display: block;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px color-mix(in srgb, #2aabee 34%, transparent);
 }
 .weekly-profile-auth small {
   max-width: none;
@@ -2844,4 +2831,78 @@ a.weekly-settings-row.weekly-settings-link strong {
 }
 .weekly-profile-group .weekly-settings-row {
   min-height: 50px;
+}
+
+
+/* --- профиль: контент скроллится без всплывающего скроллбара --- */
+.weekly-profile .weekly-profile-content {
+  scrollbar-width: none;
+}
+.weekly-profile .weekly-profile-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- копируемый telegram id --- */
+.weekly-profile button.weekly-profile-hero-id {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--weekly-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.weekly-profile button.weekly-profile-hero-id b {
+  color: var(--weekly-text);
+  font-weight: 650;
+}
+.weekly-profile button.weekly-profile-hero-id:active {
+  opacity: 0.55;
+}
+.weekly-replace-sheet .weekly-tg-copy-id {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.weekly-replace-sheet .weekly-tg-copy-id b {
+  color: var(--weekly-text);
+  font-weight: 650;
+}
+.weekly-replace-sheet .weekly-tg-copy-id:active {
+  opacity: 0.55;
+}
+
+
+/* --- кнопка «выйти»: маленькая, справа сверху карточки профиля --- */
+.weekly-profile .weekly-profile-hero {
+  position: relative;
+}
+.weekly-profile .weekly-profile-hero-actions {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  margin: 0;
+}
+.weekly-profile button.weekly-profile-mini {
+  min-height: 0;
+  padding: 4px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--weekly-fill);
+  color: var(--weekly-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.weekly-profile button.weekly-profile-mini:active {
+  opacity: 0.6;
+}
+
+/* --- перерыв между парами: чуть больше воздуха над и под линией --- */
+.agenda-list .agenda-break {
+  margin: 6px 0;
 }
