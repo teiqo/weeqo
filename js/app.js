@@ -1909,7 +1909,7 @@ function openProfile() {
             <div class="weekly-profile-auth-overlay" id="profile-tg-widget"></div>
           </div>
           <small>${
-            tgConfigured()
+            tgConfigured() || TELEGRAM_BOT_ID
               ? "на телефоне откроется приложение telegram — подтверди вход и вернись сюда, вход дойдёт сам"
               : "вход через telegram не настроен"
           }</small>
@@ -1997,7 +1997,7 @@ function openProfile() {
   </div>`;
   backdrop.hidden = false;
   state.profileOpen = true;
-  if (!tgSession && tgConfigured()) mountTelegramWidget(document.getElementById("profile-tg-widget"));
+  if (!tgSession && !TELEGRAM_BOT_ID && tgConfigured()) mountTelegramWidget(document.getElementById("profile-tg-widget"));
 }
 
 function closeProfile() {
@@ -2128,9 +2128,13 @@ function bindExtra() {
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
     else if (act.dataset.act === "tg-login") {
-      /* Красивую кнопку перекрывает невидимый официальный виджет — клик уходит
-         в него и открывается страница входа Telegram. Сюда попадаем, только
-         если виджет ещё не загрузился (слабая сеть). */
+      /* Есть Client ID — открываем новую страницу входа Telegram (OIDC-попап).
+         Иначе кнопку перекрывает невидимый legacy-виджет, и сюда мы попадаем,
+         только если он ещё не загрузился (слабая сеть). */
+      if (TELEGRAM_BOT_ID) {
+        startOidcLogin();
+        return;
+      }
       const overlay = document.getElementById("profile-tg-widget");
       if (!overlay || !overlay.querySelector("iframe")) toast("кнопка входа ещё грузится — секунду…");
     } else if (act.dataset.act === "notifs-toggle") {
@@ -2706,6 +2710,7 @@ function readableAccent(hex, theme) {
 var SHARED_SWAPS_URL = window.SHARED_SWAPS_URL || "";
 var FIREBASE_API_KEY = window.FIREBASE_API_KEY || "";
 var TELEGRAM_BOT_NAME = window.TELEGRAM_BOT_NAME || "";
+var TELEGRAM_BOT_ID = window.TELEGRAM_BOT_ID || "";
 var TELEGRAM_BOT_TOKEN_SHA256 = window.TELEGRAM_BOT_TOKEN_SHA256 || "";
 var sharedSync = { pushing: false, again: false, poll: null };
 
@@ -2890,6 +2895,9 @@ async function hmacSha256Hex(keyBytes, text) {
 async function verifyTgAuth(payload) {
   try {
     if (!payload || !payload.id || !payload.hash || !payload.auth_date) return false;
+    /* OIDC-сессия (вход через telegram-login.js): вместо HMAC проверяем
+       подпись JWT по публичным ключам Telegram (JWKS). */
+    if (payload.hash === "oidc") return Boolean(await verifyTgIdToken(payload.id_token));
     const keys = Object.keys(payload)
       .filter((k) => k !== "hash" && payload[k] !== undefined && payload[k] !== null && payload[k] !== "")
       .sort();
@@ -2899,6 +2907,123 @@ async function verifyTgAuth(payload) {
   } catch (e) {
     return false;
   }
+}
+
+/* ---------- вход через страницу oauth.telegram.org (как на csu) ----------
+   Библиотека telegram-login.js открывает официальную страницу входа Telegram
+   в попапе (на телефоне — с переходом в приложение), сама делает PKCE-обмен
+   и возвращает готовый id_token через postMessage. Бэкенд не нужен: подпись
+   JWT проверяем на клиенте по публичным ключам Telegram (JWKS). */
+var TG_JWKS_URL = "https://oauth.telegram.org/.well-known/jwks.json";
+var tgJwksCache = null;
+
+function tgB64urlBytes(s) {
+  s = String(s).replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+}
+
+function tgB64urlJson(s) {
+  return JSON.parse(new TextDecoder().decode(tgB64urlBytes(s)));
+}
+
+/* Проверка id_token: подпись RS256 по JWKS + iss/aud/exp (+ nonce при свежем входе). */
+async function verifyTgIdToken(token, expectedNonce) {
+  try {
+    if (!token || !TELEGRAM_BOT_ID) return null;
+    const parts = String(token).split(".");
+    if (parts.length !== 3) return null;
+    const header = tgB64urlJson(parts[0]);
+    const payload = tgB64urlJson(parts[1]);
+    if (!header || header.alg !== "RS256" || !header.kid) return null;
+    if (!payload || payload.iss !== "https://oauth.telegram.org") return null;
+    if (String(payload.aud) !== String(TELEGRAM_BOT_ID)) return null;
+    if (!payload.exp || Number(payload.exp) * 1000 < Date.now()) return null;
+    if (expectedNonce && payload.nonce !== expectedNonce) return null;
+    async function fetchJwks() {
+      const resp = await fetch(TG_JWKS_URL, { cache: "no-store" });
+      if (!resp.ok) return null;
+      tgJwksCache = await resp.json();
+    }
+    if (!tgJwksCache) await fetchJwks();
+    let jwk = tgJwksCache && (tgJwksCache.keys || []).find((k) => k && k.kid === header.kid);
+    if (!jwk) {
+      /* ключ могли заротировать — сбрасываем кэш и пробуем ещё раз */
+      await fetchJwks();
+      jwk = tgJwksCache && (tgJwksCache.keys || []).find((k) => k && k.kid === header.kid);
+      if (!jwk) return null;
+    }
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+    const data = new TextEncoder().encode(parts[0] + "." + parts[1]);
+    const ok = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, tgB64urlBytes(parts[2]), data);
+    return ok ? payload : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/* Сессия weeqo из клеймов OIDC id_token. */
+function oidcSessionFromPayload(payload, idToken) {
+  return {
+    id: Number(payload.id || payload.sub),
+    first_name: payload.given_name || payload.name || "",
+    last_name: payload.family_name || "",
+    username: payload.preferred_username || "",
+    photo_url: payload.picture || "",
+    auth_date: Number(payload.iat) || Math.floor(Date.now() / 1000),
+    hash: "oidc",
+    id_token: idToken,
+  };
+}
+
+var tgLoginLibLoading = false;
+
+/* Открывает официальную страницу входа Telegram (та же, что на csu.noteven.dev). */
+function startOidcLogin() {
+  if (!TELEGRAM_BOT_ID) return false;
+  const run = () => {
+    try {
+      const nonce = String(Date.now()) + "x" + Math.random().toString(36).slice(2);
+      Telegram.Login.auth(
+        { client_id: Number(TELEGRAM_BOT_ID), scope: ["profile"], nonce: nonce },
+        (data) => {
+          if (!data || data.error || !data.id_token) return; /* окно закрыли без входа */
+          verifyTgIdToken(data.id_token, nonce).then((payload) => {
+            if (!payload || !(payload.id || payload.sub)) {
+              toast("вход не подтвердился — попробуй ещё раз");
+              return;
+            }
+            applyTgSession(oidcSessionFromPayload(payload, data.id_token));
+          });
+        }
+      );
+    } catch (e) {
+      toast("не получилось открыть вход — проверь интернет");
+    }
+  };
+  if (window.Telegram && window.Telegram.Login) {
+    run();
+  } else if (!tgLoginLibLoading) {
+    tgLoginLibLoading = true;
+    const s = document.createElement("script");
+    s.src = "https://oauth.telegram.org/js/telegram-login.js";
+    s.onload = () => {
+      tgLoginLibLoading = false;
+      run();
+    };
+    s.onerror = () => {
+      tgLoginLibLoading = false;
+      toast("не получилось открыть вход — проверь интернет");
+    };
+    document.head.appendChild(s);
+  }
+  return true;
 }
 
 function saveTgSession() {
@@ -2935,16 +3060,7 @@ function checkTgAuthRedirect() {
         return;
       }
       if (tgSession && String(tgSession.id) === String(payload.id)) return; /* уже вошли */
-      tgSession = payload;
-      tgRegisterState = "idle";
-      saveTgSession();
-      updateTgButton();
-      if (state.profileOpen) openProfile();
-      toast("привет, " + tgDisplayName(payload) + "!");
-      tgSyncRoles().then(() => {
-        pullSharedSwaps();
-        if (loadNotifPrefs().telegram) syncTgSub();
-      });
+      applyTgSession(payload);
     });
   } catch (e) {
     /* кривые параметры — игнорируем */
@@ -2978,23 +3094,28 @@ function tgLogout() {
   updateTgButton();
 }
 
+/* Общее завершение входа: сессия, UI, роли. */
+function applyTgSession(payload) {
+  tgSession = payload;
+  tgRegisterState = "idle";
+  saveTgSession();
+  updateTgButton();
+  renderTgSheetBody();
+  if (state.profileOpen) openProfile();
+  toast("привет, " + tgDisplayName(payload) + "!");
+  tgSyncRoles().then(() => {
+    pullSharedSwaps();
+    if (loadNotifPrefs().telegram) syncTgSub();
+  });
+}
+
 window.onTelegramAuth = function (payload) {
   verifyTgAuth(payload).then((ok) => {
     if (!ok) {
       toast("вход не подтвердился — попробуй ещё раз");
       return;
     }
-    tgSession = payload;
-    tgRegisterState = "idle";
-    saveTgSession();
-    updateTgButton();
-    renderTgSheetBody();
-    if (state.profileOpen) openProfile();
-    toast("привет, " + tgDisplayName(payload) + "!");
-    tgSyncRoles().then(() => {
-      pullSharedSwaps();
-      if (loadNotifPrefs().telegram) syncTgSub();
-    });
+    applyTgSession(payload);
   });
 };
 
@@ -3403,10 +3524,15 @@ function renderTgSheetBody() {
   if (!tgSession) {
     body.innerHTML =
       '<div class="weekly-replace-head"><strong>вход через Telegram</strong><span>чтобы предлагать замены</span></div>' +
-      '<div class="weekly-tg-widget" id="tg-widget-mount"></div>' +
-      '<p class="weekly-replace-hint">кнопка работает только на опубликованном сайте — домен привязывается к боту через /setdomain у @BotFather. после входа твои замены уходят редактору на проверку.</p>' +
+      (TELEGRAM_BOT_ID
+        ? '<div class="weekly-tg-widget"><button type="button" class="weekly-profile-auth-btn" data-tg="oidc-login">' +
+          '<span class="weekly-profile-auth-icon">' + ICON_LOGIN + "</span>" +
+          '<span class="weekly-profile-auth-text"><strong>войти через Telegram</strong><small>общие замены и синхронизация профиля</small></span>' +
+          ICON_CHEVRON + "</button></div>"
+        : '<div class="weekly-tg-widget" id="tg-widget-mount"></div>') +
+      '<p class="weekly-replace-hint">кнопка работает на опубликованном сайте. после входа твои замены уходят редактору на проверку.</p>' +
       '<div class="weekly-replace-actions"><button type="button" data-tg="close">закрыть</button></div>';
-    mountTelegramWidget(body.querySelector("#tg-widget-mount"));
+    if (!TELEGRAM_BOT_ID) mountTelegramWidget(body.querySelector("#tg-widget-mount"));
     return;
   }
   const role = myRole();
@@ -3471,6 +3597,7 @@ function openTgSheet() {
     if (!el) return;
     const act = el.dataset.tg;
     if (act === "close") closeTgSheet();
+    else if (act === "oidc-login") startOidcLogin();
     else if (act === "logout") {
       tgLogout();
       closeTgSheet();
