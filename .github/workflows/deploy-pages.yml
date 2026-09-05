@@ -1,0 +1,55 @@
+name: deploy pages
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build js/config.js from environment
+        env:
+          SHARED_SWAPS_URL: ${{ vars.SHARED_SWAPS_URL }}
+          TELEGRAM_BOT_NAME: ${{ vars.TELEGRAM_BOT_NAME }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          TELEGRAM_BOT_TOKEN_SHA256: ${{ secrets.TELEGRAM_BOT_TOKEN_SHA256 }}
+        run: |
+          printf '%s\n' \
+            '/* ---------- конфиг weeqo: генерируется Action-ом из окружения github-pages ---------- */' \
+            "var SHARED_SWAPS_URL = \"${SHARED_SWAPS_URL}\";" \
+            "var FIREBASE_API_KEY = \"${FIREBASE_API_KEY}\";" \
+            "var TELEGRAM_BOT_NAME = \"${TELEGRAM_BOT_NAME}\";" \
+            "var TELEGRAM_BOT_TOKEN_SHA256 = \"${TELEGRAM_BOT_TOKEN_SHA256}\";" \
+            > js/config.js
+          grep -c '^var ' js/config.js
+
+      - name: stage site (без служебных файлов)
+        run: |
+          mkdir -p dist
+          rsync -a \
+            --exclude '.git' --exclude '.github' --exclude 'tools' \
+            --exclude 'dist' --exclude 'firebase-rules.json' \
+            ./ dist/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
