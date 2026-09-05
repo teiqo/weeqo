@@ -2,8 +2,8 @@ name: update-schedule
 
 on:
   schedule:
-    # каждый час (GitHub может немного задерживать запуск)
-    - cron: "0 * * * *"
+    # каждые 3 часа (GitHub может немного задерживать запуск)
+    - cron: "0 */3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -19,8 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: install poppler
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+      - name: install pdfplumber
+        run: python3 -m pip install --break-system-packages pdfplumber
 
       - name: parse pdf into data/schedule.json
         run: python3 tools/update_schedule.py
