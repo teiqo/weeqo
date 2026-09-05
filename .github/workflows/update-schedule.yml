@@ -1,1 +1,38 @@
+name: update-schedule
 
+on:
+  schedule:
+    # каждые 30 минут (GitHub может немного задерживать запуск)
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-schedule
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install poppler
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+
+      - name: parse pdf into data/schedule.json
+        run: python3 tools/update_schedule.py
+
+      - name: commit changes
+        run: |
+          if [ -n "$(git status --porcelain data/schedule.json)" ]; then
+            git config user.name "schedule-bot"
+            git config user.email "schedule-bot@users.noreply.github.com"
+            git add data/schedule.json
+            git commit -m "chore: refresh schedule from sustec.ru"
+            git push
+          else
+            echo "no changes"
+          fi
