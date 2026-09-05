@@ -2421,3 +2421,38 @@ a.weekly-settings-row.weekly-settings-link strong {
     display: none;
   }
 }
+
+/* --- колокольчик уведомлений и добавление редактора --- */
+.weekly-bell-btn {
+  position: relative;
+}
+.weekly-tg-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.weekly-tg-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+.weekly-tg-add button {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.weekly-tg-add button:active {
+  transform: scale(0.97);
+}

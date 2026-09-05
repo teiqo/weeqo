@@ -6,14 +6,14 @@
       ".read": true,
       "$key": {
         ".write": "auth != null && root.child('weeqo-users').child(auth.uid).exists() && (root.child('weeqo-meta/owner').val() === root.child('weeqo-users').child(auth.uid).val() || root.child('weeqo-editors').child(root.child('weeqo-users').child(auth.uid).val()).isString())",
-        ".validate": "newData.val() === null || (newData.isObject() && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() <= now + 300000 && (!newData.child('subject').exists() || newData.child('subject').val().length <= 120) && (!newData.child('teacher').exists() || newData.child('teacher').val().length <= 120) && (!newData.child('room').exists() || newData.child('room').val().length <= 40))"
+        ".validate": "newData.val() === null || (newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() <= now + 300000 && (!newData.child('subject').exists() || newData.child('subject').val().length <= 120) && (!newData.child('teacher').exists() || newData.child('teacher').val().length <= 120) && (!newData.child('room').exists() || newData.child('room').val().length <= 40))"
       }
     },
     "weeqo-pending": {
       ".read": "auth != null && root.child('weeqo-users').child(auth.uid).exists() && (root.child('weeqo-meta/owner').val() === root.child('weeqo-users').child(auth.uid).val() || root.child('weeqo-editors').child(root.child('weeqo-users').child(auth.uid).val()).isString())",
       "$key": {
         ".write": "auth != null && root.child('weeqo-users').child(auth.uid).exists() && (newData.exists() || root.child('weeqo-meta/owner').val() === root.child('weeqo-users').child(auth.uid).val() || root.child('weeqo-editors').child(root.child('weeqo-users').child(auth.uid).val()).isString())",
-        ".validate": "newData.val() === null || (newData.isObject() && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() <= now + 300000 && newData.child('by').isString())"
+        ".validate": "newData.val() === null || (newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() <= now + 300000 && newData.child('by').isString())"
       }
     },
     "weeqo-users": {

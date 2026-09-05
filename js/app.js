@@ -2456,7 +2456,10 @@ function scheduleModule() {
 }
 
 function scheduleStamp(payload) {
-  if (payload && payload.updatedAt) scheduleUpdatedAt = payload.updatedAt;
+  if (payload && payload.updatedAt) {
+    notifyAboutScheduleStamp(payload.updatedAt);
+    scheduleUpdatedAt = payload.updatedAt;
+  }
   renderDataStamp();
   const el = $("#freshness");
   if (!el || !payload || !payload.updatedAt) return;
@@ -3002,6 +3005,7 @@ async function pullPending() {
     });
     const data = resp.ok ? await resp.json() : null;
     pendingMap = data && typeof data === "object" ? data : {};
+    notifyAboutPending();
   } catch (e) {
     /* офлайн */
   }
@@ -3092,6 +3096,7 @@ async function pullSharedSwaps() {
       const data = await resp.json();
       if (data && typeof data === "object") remote = decodeSwapEntries(data);
     }
+    notifyAboutRemoteSwaps(remote);
     const map = loadSwaps();
     const changedLocal = mergeSwapMaps(map, remote) || pruneSwapMap(map);
     if (changedLocal) {
@@ -3197,6 +3202,11 @@ function renderTgSheetBody() {
   const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "участник";
   let html =
     '<div class="weekly-replace-head"><strong>' + escapeHtml(tgDisplayName(tgSession)) + "</strong><span>" + roleLabel + "</span></div>";
+  if (role === "user")
+    html +=
+      '<p class="weekly-replace-hint">мой id: ' +
+      escapeHtml(String(tgSession.id)) +
+      " — назови его владельцу, чтобы получить права редактора</p>";
   if (role === "owner" || role === "editor") {
     const keys = Object.keys(pendingMap).sort((a, b) => (pendingMap[b].updatedAt || 0) - (pendingMap[a].updatedAt || 0));
     html += '<div class="weekly-tg-section"><span>заявки (' + keys.length + ")</span>";
@@ -3209,13 +3219,17 @@ function renderTgSheetBody() {
   if (role === "owner") {
     const ids = Object.keys(tgRoles.editors);
     html += '<div class="weekly-tg-section"><span>редакторы</span>';
-    if (!ids.length) html += '<p class="weekly-replace-hint">пока нет. выдать доступ можно кнопкой «+ редактор» в любой заявке.</p>';
+    if (!ids.length) html += '<p class="weekly-replace-hint">пока нет. добавь по id ниже или кнопкой «+ редактор» в любой заявке.</p>';
     ids.forEach((tg) => {
       html +=
         '<div class="weekly-tg-row"><div class="weekly-tg-row-text"><strong>' + escapeHtml(String(tgRoles.editors[tg])) +
         '</strong></div><div class="weekly-tg-row-actions"><button type="button" data-tg="revoke" data-tgid="' +
         escapeHtml(tg) + '">убрать</button></div></div>';
     });
+    html +=
+      '<div class="weekly-tg-add"><input type="text" inputmode="numeric" id="tg-add-editor-id" placeholder="id редактора" autocomplete="off">' +
+      '<button type="button" data-tg="add-editor">добавить</button></div>' +
+      '<p class="weekly-replace-hint">id виден в окне входа у человека (строка «мой id»). редактор проверяет заявки, а его замены уходят всем сразу.</p>';
     html += "</div>";
   }
   html +=
@@ -3253,9 +3267,227 @@ function openTgSheet() {
       const entry = pendingMap[el.dataset.key] || {};
       grantEditor(el.dataset.tgid, entry.byName);
     } else if (act === "revoke") revokeEditor(el.dataset.tgid);
+    else if (act === "add-editor") {
+      const inp = document.getElementById("tg-add-editor-id");
+      const id = inp ? inp.value.trim() : "";
+      if (!/^\d{3,32}$/.test(id)) {
+        toast("нужен числовой id — он есть в окне входа у человека");
+        return;
+      }
+      grantEditor(id, "редактор " + id);
+    }
   });
   renderTgSheetBody();
   if (myRole() === "owner" || myRole() === "editor") pullPending();
+}
+
+/* ---------- уведомления (колокольчик в шапке) ----------
+   Лента в localStorage: кто-то опубликовал замену/отмену, обновилось базовое
+   расписание, редактору пришла новая заявка. Бейдж = непрочитанные. */
+var NOTIF_KEY = "weekly:notifs:v1";
+var NOTIF_SEEN_SWAPS_KEY = "weekly:notif-seen-swaps:v1";
+var NOTIF_SEEN_SCHEDULE_KEY = "weekly:notif-seen-schedule:v1";
+var NOTIF_SEEN_PENDING_KEY = "weekly:notif-seen-pending:v1";
+var notifList = null;
+
+function loadNotifs() {
+  if (notifList) return;
+  notifList = [];
+  try {
+    var raw = localStorage.getItem(NOTIF_KEY);
+    if (raw) {
+      var data = JSON.parse(raw);
+      if (Array.isArray(data))
+        notifList = data.filter(function (n) { return n && typeof n.text === "string" && typeof n.at === "number"; });
+    }
+  } catch (e) {
+    notifList = [];
+  }
+}
+
+function saveNotifs() {
+  try {
+    localStorage.setItem(NOTIF_KEY, JSON.stringify(notifList || []));
+  } catch (e) {
+    /* приватный режим */
+  }
+}
+
+function pushNotif(text) {
+  loadNotifs();
+  notifList.unshift({ text: text, at: Date.now(), read: false });
+  if (notifList.length > 50) notifList.length = 50;
+  saveNotifs();
+  updateBellButton();
+}
+
+function updateBellButton() {
+  var btn = document.getElementById("bell-btn");
+  if (!btn) return;
+  loadNotifs();
+  var unread = 0;
+  for (var i = 0; i < notifList.length; i++) if (!notifList[i].read) unread++;
+  var badge = document.getElementById("bell-badge");
+  if (badge) {
+    badge.hidden = unread === 0;
+    badge.textContent = String(unread);
+  }
+}
+
+/* Текстовое описание записи замены для ленты. */
+function describeSwapForNotif(key, entry) {
+  var m = key.match(/\|(\d{4}-\d{2}-\d{2}):(\d+)$/);
+  var when = m ? dateLabel(dateFromIso(m[1])) + " · " + m[2] + " пара" : key;
+  var what = "замена";
+  if (entry.deleted) what = "сброс замены";
+  else if (entry.cancelled) what = "отмена пары";
+  var parts = [entry.subject, entry.teacher, entry.room].filter(Boolean);
+  var who = entry.byName ? " · " + entry.byName : "";
+  return what + " · " + when + (parts.length ? ": " + parts.join(" · ") : "") + who;
+}
+
+/* Свежие записи из облака -> лента. Первый прогон только запоминает состояние. */
+function notifyAboutRemoteSwaps(remote) {
+  if (!remote || typeof remote !== "object") return;
+  var seen = null;
+  var firstRun = false;
+  try {
+    var raw = localStorage.getItem(NOTIF_SEEN_SWAPS_KEY);
+    seen = raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    seen = null;
+  }
+  if (!seen || typeof seen !== "object") {
+    seen = {};
+    firstRun = true;
+  }
+  var myId = tgSession ? String(tgSession.id) : null;
+  var gprefix = (state.group || DEFAULT_GROUP) + "|";
+  var changed = false;
+  for (var key in remote) {
+    var entry = remote[key];
+    if (!entry || typeof entry !== "object") continue;
+    var t = typeof entry.updatedAt === "number" ? entry.updatedAt : 0;
+    if (!t) continue;
+    var prev = typeof seen[key] === "number" ? seen[key] : 0;
+    if (t <= prev) continue;
+    seen[key] = t;
+    changed = true;
+    if (!firstRun && key.indexOf(gprefix) === 0 && (!myId || String(entry.by || "") !== myId)) {
+      pushNotif(describeSwapForNotif(key, entry));
+    }
+  }
+  if (changed) {
+    try {
+      localStorage.setItem(NOTIF_SEEN_SWAPS_KEY, JSON.stringify(seen));
+    } catch (e) {}
+  }
+}
+
+/* Новые заявки -> лента владельца/редактора. */
+function notifyAboutPending() {
+  var role = myRole();
+  if (role !== "owner" && role !== "editor") return;
+  var seen = null;
+  var firstRun = false;
+  try {
+    var raw = localStorage.getItem(NOTIF_SEEN_PENDING_KEY);
+    seen = raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    seen = null;
+  }
+  if (!seen || typeof seen !== "object") {
+    seen = {};
+    firstRun = true;
+  }
+  var nowMap = {};
+  Object.keys(pendingMap).forEach(function (enc) {
+    nowMap[enc] = (pendingMap[enc] && pendingMap[enc].updatedAt) || 0;
+  });
+  if (!firstRun) {
+    Object.keys(nowMap).forEach(function (enc) {
+      if (!(enc in seen)) pushNotif("заявка · " + describeSwapForNotif(decodeSwapKey(enc), pendingMap[enc] || {}));
+    });
+  }
+  try {
+    localStorage.setItem(NOTIF_SEEN_PENDING_KEY, JSON.stringify(nowMap));
+  } catch (e) {}
+}
+
+/* Смена штампа данных -> «обновились пары». */
+function notifyAboutScheduleStamp(updatedAt) {
+  if (!updatedAt) return;
+  try {
+    var prev = localStorage.getItem(NOTIF_SEEN_SCHEDULE_KEY);
+    if (prev && prev !== updatedAt) pushNotif("обновились пары — базовое расписание обновлено");
+    localStorage.setItem(NOTIF_SEEN_SCHEDULE_KEY, updatedAt);
+  } catch (e) {}
+}
+
+function closeBellSheet() {
+  var backdrop = document.getElementById("bell-backdrop");
+  if (!backdrop) return;
+  backdrop.classList.remove("is-open");
+  window.setTimeout(function () { backdrop.remove(); }, 160);
+}
+
+function renderBellBody() {
+  var body = document.getElementById("bell-sheet-body");
+  if (!body) return;
+  loadNotifs();
+  var html = '<div class="weekly-replace-head"><strong>уведомления</strong><span>замены и обновления</span></div>';
+  if (!notifList.length) {
+    html +=
+      '<p class="weekly-replace-hint weekly-updates-empty">пока тихо. как только кто-то опубликует замену, отменит пару или обновится расписание — здесь появится запись.</p>';
+  } else {
+    html += '<div class="weekly-tg-section">';
+    notifList.forEach(function (n) {
+      html +=
+        '<div class="weekly-tg-row"><div class="weekly-tg-row-text"><strong>' +
+        escapeHtml(n.text) +
+        "</strong><span>" +
+        escapeHtml(fmtDateTime(n.at)) +
+        "</span></div></div>";
+    });
+    html += "</div>";
+  }
+  html +=
+    '<div class="weekly-replace-actions">' +
+    (notifList.length ? '<button type="button" data-bell="clear">очистить</button>' : "") +
+    '<button type="button" data-bell="close">закрыть</button></div>';
+  body.innerHTML = html;
+}
+
+function openBellSheet() {
+  closeBellSheet();
+  var backdrop = document.createElement("div");
+  backdrop.id = "bell-backdrop";
+  backdrop.className = "weekly-replace-backdrop";
+  backdrop.innerHTML =
+    '<div class="weekly-replace-sheet weekly-tg-sheet" role="dialog" aria-label="уведомления"><div id="bell-sheet-body"></div></div>';
+  document.body.appendChild(backdrop);
+  window.requestAnimationFrame(function () { backdrop.classList.add("is-open"); });
+  backdrop.addEventListener("click", function (e) {
+    if (e.target === backdrop) {
+      closeBellSheet();
+      return;
+    }
+    var el = e.target.closest("[data-bell]");
+    if (!el) return;
+    if (el.dataset.bell === "close") closeBellSheet();
+    else if (el.dataset.bell === "clear") {
+      notifList = [];
+      saveNotifs();
+      updateBellButton();
+      renderBellBody();
+    }
+  });
+  /* Открытие = всё прочитано. */
+  loadNotifs();
+  notifList.forEach(function (n) { n.read = true; });
+  saveNotifs();
+  updateBellButton();
+  renderBellBody();
 }
 
 /* ---------- журнал обновлений расписания («?» внизу настроек) ---------- */
@@ -3394,6 +3626,12 @@ function manualRefresh(btn) {
   if (btn) btn.addEventListener("click", openTgSheet);
   loadTgSession();
   updateTgButton();
+})();
+
+(function initBell() {
+  const btn = document.getElementById("bell-btn");
+  if (btn) btn.addEventListener("click", openBellSheet);
+  updateBellButton();
 })();
 
 (function startSharedSwaps() {
