@@ -1,4 +1,4 @@
-const CACHE = "weeqo-groups-v19";
+const CACHE = "weeqo-groups-v32";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,10 +8,11 @@ const ASSETS = [
   "./assets/weekly-transitions-BckgDRnH.css",
   "./assets/weekly-opaque-GLxzbT3R.css",
   "./css/patch.css",
+  "./js/config.js",
   "./js/app.js",
   "./js/schedule.js",
-  "./images/weekly.svg",
-  "./images/weekly-180.png",
+  "./images/weeqo-icon.svg",
+  "./images/weeqo-180.png",
   "./manifest.webmanifest"
 ];
 
@@ -34,8 +35,21 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  if (event.request.url.indexOf("data/schedule.json") !== -1) {
+  /* schedule.json, changelog.json и config.js — network-first: свежее важнее кэша. */
+  if (
+    event.request.url.indexOf("data/schedule.json") !== -1 ||
+    event.request.url.indexOf("data/changelog.json") !== -1 ||
+    event.request.url.indexOf("js/config.js") !== -1
+  ) {
     event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+    return;
+  }
+  /* Облако с заменами, auth-токены и виджет Telegram не кешируем.
+     Офлайн отдаём 503 сами, чтобы не сыпать Uncaught в консоль. */
+  if (/\.(firebaseio\.com|firebasedatabase\.app|googleapis\.com|getpantry\.cloud)|telegram\.org/.test(event.request.url)) {
+    event.respondWith(
+      fetch(event.request).catch(() => new Response(null, { status: 503 }))
+    );
     return;
   }
   event.respondWith(

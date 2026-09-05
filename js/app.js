@@ -377,7 +377,6 @@ function liveCardHtml(live) {
     return `<article class="live-lesson-card is-next">${body}</article>`;
   }
   return `<article class="live-lesson-card is-current">
-    <div class="live-card-backglow"></div>
     <div class="live-card-glass">
       <div class="live-card-particles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
       ${body}
@@ -438,7 +437,7 @@ function emptyDayHtml(d) {
 
 function headingHtml(d, sub) {
   const today = sameDay(d, startOfDay(new Date()));
-  const title = today ? "Сегодня" : dateLabel(d);
+  const title = today ? "сегодня" : dateLabel(d);
   const rel = today ? "" : relLabel(d);
   return `<div class="weekly-day-heading t-stagger is-shown">
     <div class="weekly-day-heading-copy">
@@ -602,11 +601,7 @@ function bellsRows(kind) {
     const gap = bellMinutes(next.range.from) - bellMinutes(item.range.to);
     if (gap <= 0) return;
     rows.push(`<div class="agenda-row is-bell-break">
-      <div class="agenda-row-time"><time>перерыв</time></div>
-      <div class="agenda-row-content">
-        <strong>${item.range.to}–${next.range.from}</strong>
-        <small>${bellDuration(gap)}${gap >= 30 ? " · большой" : ""}</small>
-      </div>
+      <div class="bell-break-line"><span>${gap >= 30 ? "большой перерыв" : "перерыв"}</span><strong>${bellDuration(gap)}</strong><small>${item.range.to}–${next.range.from}</small></div>
     </div>`);
   });
   return rows.join("");
@@ -725,8 +720,8 @@ function setScene(html, direction) {
     { duration: dur, easing: ease, fill: "both" }
   );
 
-  /* Каскадные анимации строк длятся дольше смены подложки: раньше таймер
-     обрывал их через dur, и при скролле/быстром листании пары моргали.
+  /* Каскадные анимации строк длятся дольше с��ены подложки: раньше таймер
+     обр��вал их через dur, и при скролле/быстром листании пары моргали.
      Ждём полного каскада и трогаем только свои WAAPI-анимации. */
   const rowDur = cssTimeMs("--duration-fast", 320);
   const rowStep = cssTimeMs("--duration-stagger", 55);
@@ -906,7 +901,7 @@ function applyTheme() {
   const root = document.documentElement;
   root.dataset.theme = state.theme;
   // Тёмные варианты neutral/opaque больше не переключают тему сами.
-  // Для белого режима используем отдельные светлые варианты этих же палитр.
+  // Для белого режима и������������п������льзуем отдельные светлые варианты этих же палитр.
   if (!PALETTES.includes(state.palette)) state.palette = "default";
   root.dataset.theme = state.theme;
   if (state.palette === "default") root.removeAttribute("data-weekly-palette");
@@ -962,7 +957,7 @@ function applyTheme() {
   applyFlags();
 }
 
-/* ---------- состояние ---------- */
+/* ---------- сост��яние ---------- */
 
 function save() {
   try {
@@ -999,7 +994,10 @@ function load() {
     if (["schedule", "bells"].includes(data.tab)) state.tab = data.tab;
     if (typeof data.light === "boolean") state.light = data.light;
     if (data.scope === "day" || data.scope === "week") state.scope = data.scope;
-    if (typeof data.group === "string" && GROUPS.some((g) => g.id === data.group)) {
+    /* Не проверяем GROUPS: на старте там только зашитая группа, остальные
+       подъедут из data/schedule.json позже. Если группы в итоге нет —
+       applySchedulePayload сам откатит на группу по умолчанию. */
+    if (typeof data.group === "string") {
       state.group = data.group;
       state.draftGroup = data.group;
     }
@@ -1099,7 +1097,7 @@ function shiftDay(delta) {
   selectDate(addDays(state.selected, delta), delta > 0 ? "forward" : "backward");
 }
 
-/* ---------- зажать и вести выделение по дням ---------- */
+/* ---------- зажать и вести выделени�� по д��ям ---------- */
 
 let scrub = null;
 let scrubFrame = null;
@@ -1207,7 +1205,7 @@ function scrubFrameStep(now) {
       scrub.target,
       dt,
       scrub.pointerDown ? 330 : 420,
-      scrub.pointerDown ? 23 : 40
+      scrub.pointerDown ? 23 : 47
     );
     scrub.position = Math.max(-8, Math.min(scrub.max + 8, next.position));
     scrub.velocity = next.velocity;
@@ -1236,7 +1234,7 @@ function activateScrub() {
   if (!scrub || !scrub.pointerDown || scrub.active) return;
   scrub.active = true;
   /* Захватываем указатель только после начала настоящего перетаскивания.
-     Поэтому обычный клик остаётся кликом по самой кнопке дня. */
+     Поэтому обычный клик остаётся кликом по самой кноп��е дня. */
   if (!scrub.strip.hasPointerCapture(scrub.pointerId)) {
     scrub.strip.setPointerCapture(scrub.pointerId);
   }
@@ -1352,7 +1350,7 @@ function settleScrub() {
   /* На телефоне быстрый флик оставляет огромную скорость, из-за которой
      пружина проскакивает цель и линия сильно подпрыгивает. Гасим импульс
      при отпускании, чтобы овершут был маленьким и аккуратным. */
-  scrub.velocity = Math.max(-900, Math.min(900, scrub.velocity * 0.5));
+  scrub.velocity = Math.max(-480, Math.min(480, scrub.velocity * 0.35));
   scrub.strip.classList.remove("is-scrubbing");
   scrub.strip.classList.add("is-settling");
   const scene = $("#scene");
@@ -1431,7 +1429,7 @@ function bindStrip() {
         /* ignore */
       }
     }
-    /* Долгое удержание больше не требуется: таймер остаётся только как
+    /* Долгое удержание больше не требуется: та��мер остаётся только как
        страховка для случая, когда палец стоит на месте. */
     holdTimer = e.pointerType === "mouse" ? null : window.setTimeout(activateScrub, 45);
   });
@@ -1700,7 +1698,7 @@ function bindEvents() {
       }
       if (swipe.axis !== "x") return;
       swipe.dx = dx;
-      /* резинка: сцена идёт мягче пальца и не улетает за край */
+      /* резинка: сцена идёт мягче пальца и не ��летает за край */
       const eased = Math.sign(dx) * Math.min(Math.abs(dx) * 0.42, 52);
       setSwipeShift(eased);
     },
@@ -1808,7 +1806,8 @@ function futureDaysHtml() {
     if (d <= state.selected) continue;
     out.push(dayHtml(d, false, true));
   }
-  if (!out.length) return "";
+  /* На субботе неделя заканчивается — показываем понедельник следующей. */
+  if (!out.length) out.push(dayHtml(addDays(ws, 7), false, true));
   /* Обёртка нужна, чтобы будущие дни проявлялись каскадом,
      а не возникали резко вместе со сменой сцены. */
   return `<div class="weekly-future-days">${out.join("")}</div>`;
@@ -1906,7 +1905,7 @@ function onboardingHtml() {
         </div>
         <span class="weekly-onboarding-kicker">weeqo beta</span>
         <h1>только расписание</h1>
-        <p>как это работает? каждые 30 минут мы берём расписание с сайта sustec.ru машиностроительного колледжа и загружаем его сюда</p>
+        <p>как это работает? к��ждые 30 минут мы берём расписание с сайта sustec.ru машиностроительного колледжа и загружаем его сюда</p>
       </div>
       <button class="weekly-onboarding-action" type="button" data-act="next">выбрать группу</button>
     </div>
@@ -2100,6 +2099,15 @@ function loadSwaps() {
     if (raw) {
       const data = JSON.parse(raw);
       if (data && typeof data === "object") swapMap = migrateSwaps(data);
+      let stamped = false;
+      for (const sk in swapMap) {
+        const entry = swapMap[sk];
+        if (entry && typeof entry === "object" && typeof entry.updatedAt !== "number") {
+          entry.updatedAt = Date.now();
+          stamped = true;
+        }
+      }
+      if (stamped) localStorage.setItem(SWAP_KEY, JSON.stringify(swapMap));
     }
   } catch (e) {
     /* приватный режим */
@@ -2120,14 +2128,24 @@ function swapKey(dIso, n) {
 }
 
 function swapFor(dIso, n) {
-  return loadSwaps()[swapKey(dIso, n)] || null;
+  const entry = loadSwaps()[swapKey(dIso, n)];
+  return entry && !entry.deleted ? entry : null;
 }
 
 function setSwap(dIso, n, value) {
   const map = loadSwaps();
-  if (value) map[swapKey(dIso, n)] = value;
-  else delete map[swapKey(dIso, n)];
+  if (value) {
+    value.updatedAt = Date.now();
+    map[swapKey(dIso, n)] = value;
+  } else if (sharedSwapsEnabled()) {
+    /* В общем режиме удаление тоже должно разойтись по всем —
+       оставляем надгробие со свежим штампом времени. */
+    map[swapKey(dIso, n)] = { deleted: true, updatedAt: Date.now() };
+  } else {
+    delete map[swapKey(dIso, n)];
+  }
   saveSwaps();
+  publishSwapKey(swapKey(dIso, n));
 }
 
 /* Базовое расписание лежит в slotsForBase, а здесь накладываются замены. */
@@ -2147,7 +2165,7 @@ function slotsFor(d) {
   if (!hasAny) return list;
   return list.map((slot) => {
     const sw = map[swapKey(dIso, slot.n)];
-    if (!sw) return slot;
+    if (!sw || sw.deleted) return slot;
     const next = Object.assign({}, slot);
     if (sw.cancelled) {
       next.cancelled = true;
@@ -2289,11 +2307,11 @@ function openSwapSheet(dIso, n) {
     '" placeholder="номер" /></label>' +
     '<p class="weekly-replace-hint">выбрал предмет из списка — преподаватель и аудитория подставятся сами; вписал свой предмет — они сбросятся</p>' +
     '<div class="weekly-replace-actions">' +
-    '<button class="is-primary" type="button" data-swap="save">сохранить</button>' +
+    '<button class="is-primary" type="button" data-swap="save">' + swapPrimaryLabel() + "</button>" +
     '<button type="button" data-swap="cancel-lesson">отменить пару</button>' +
     '<button type="button" data-swap="reset">сбросить</button>' +
     '<button type="button" data-swap="close">закрыть</button>' +
-    "</div></div>";
+    "</div>" + swapAccessHint() + "</div>";
 
   document.body.appendChild(backdrop);
   window.requestAnimationFrame(() => backdrop.classList.add("is-open"));
@@ -2366,7 +2384,11 @@ function openSwapSheet(dIso, n) {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeSwapSheet();
+  if (e.key === "Escape") {
+    closeSwapSheet();
+    closeTgSheet();
+    closeUpdatesSheet();
+  }
 });
 
 (() => {
@@ -2382,11 +2404,11 @@ document.addEventListener("keydown", (e) => {
 })();
 
 /* ---------- автообновление расписания ----------
-   data/schedule.json пересобирает GitHub Action каждые 30 минут из PDF
+   data/schedule.json пересобирает GitHub Action каждый час из PDF
    на sustec.ru, а приложение с тем же шагом его перечитывает. */
 var SCHEDULE_URL = "data/schedule.json";
 var SCHEDULE_CACHE_KEY = "weekly:schedule-cache:v2";
-var SCHEDULE_TTL = 30 * 60 * 1000;
+var SCHEDULE_TTL = 60 * 60 * 1000;
 var scheduleFetchedAt = 0;
 var scheduleApply = null;
 
@@ -2413,6 +2435,8 @@ function scheduleModule() {
 }
 
 function scheduleStamp(payload) {
+  if (payload && payload.updatedAt) scheduleUpdatedAt = payload.updatedAt;
+  renderDataStamp();
   const el = $("#freshness");
   if (!el || !payload || !payload.updatedAt) return;
   const when = new Date(payload.updatedAt);
@@ -2427,7 +2451,7 @@ function applySchedulePayload(payload) {
     if (typeof apply !== "function") return false;
     if (!apply(payload)) return false;
     if (!GROUPS.some((g) => g.id === state.group)) {
-      state.group = GROUPS.some((g) => g.id === DEFAULT_GROUP) ? DEFAULT_GROUP : GROUPS[0].id;
+      state.group = GROUPS.some((g) => g.id === DEFAULT_GROUP) ? DEFAULT_GROUP : (GROUPS[0] ? GROUPS[0].id : DEFAULT_GROUP);
       state.draftGroup = state.group;
       save();
     }
@@ -2478,7 +2502,7 @@ function refreshSchedule(force) {
 })();
 
 /* Слишком светлый акцент на светлом фоне и слишком тёмный на тёмном
-   не читаются, поэтому для текста и иконок берём подправленный оттенок. */
+   не читаются, поэтому для текста и иконок берём подправленный оттен��к. */
 function accentLuminance(hex) {
   const n = String(hex || "").replace("#", "");
   if (n.length !== 6) return 0.5;
@@ -2493,3 +2517,853 @@ function readableAccent(hex, theme) {
   if (theme !== "light" && lum < 0.12) return mixHex(hex, "#ffffff", 0.5);
   return hex;
 }
+
+/* ---------- общие замены через облако ---------- */
+
+/* Чтобы замена, поставленная одним человеком, была видна всем на тот же день,
+   сюда вставляется адрес общего хранилища. Два варианта:
+   1) Firebase Realtime Database (сервис Google):
+      "https://ТВОЙ-ПРОЕКТ-default-rtdb.РЕГИОН.firebasedatabase.app/weeqo-swaps.json"
+   2) корзина Pantry (getpantry.cloud):
+      "https://getpantry.cloud/apiv1/pantry/ТВОЙ-ID/basket/weeqo-swaps";
+   Пустая строка = замены хранятся только на устройстве, как раньше.
+   Проверить без правки кода можно параметром ?swaps-cloud=адрес. */
+/* Конфиг переехал в js/config.js — правь там, этот файл больше не трогай.
+   Читаем из window с запасными значениями на случай, если config.js не загрузился. */
+var SHARED_SWAPS_URL = window.SHARED_SWAPS_URL || "";
+var FIREBASE_API_KEY = window.FIREBASE_API_KEY || "";
+var TELEGRAM_BOT_NAME = window.TELEGRAM_BOT_NAME || "";
+var TELEGRAM_BOT_TOKEN_SHA256 = window.TELEGRAM_BOT_TOKEN_SHA256 || "";
+var sharedSync = { pushing: false, again: false, poll: null };
+
+/* ---------- анонимный вход Firebase ----------
+   Ок��н л��гина нет: приложение само молча получает временный токен через REST,
+   а правила базы (".write": "auth != null") пускают запись только с ним.
+   Токен живёт час, дальше тихо обновляется по refresh-токену. */
+var fbAuth = { token: null, refresh: null, uid: null, expiresAt: 0, pending: null };
+
+function firebaseAuthEnabled() {
+  return (
+    Boolean(FIREBASE_API_KEY) &&
+    /\.(firebaseio\.com|firebasedatabase\.app)/.test(sharedSwapsUrl())
+  );
+}
+
+function fbAuthLoad() {
+  try {
+    const raw = localStorage.getItem("weekly:fb-auth:v1");
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data && typeof data.refresh === "string") fbAuth.refresh = data.refresh;
+      if (data && typeof data.uid === "string") fbAuth.uid = data.uid;
+    }
+  } catch (e) {
+    /* приватный режим */
+  }
+}
+
+function fbAuthSave() {
+  try {
+    localStorage.setItem("weekly:fb-auth:v1", JSON.stringify({ refresh: fbAuth.refresh, uid: fbAuth.uid }));
+  } catch (e) {
+    /* приватный режим */
+  }
+}
+
+async function fbAuthPost(url, body) {
+  const resp = await fetch(url + "?key=" + FIREBASE_API_KEY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw new Error("firebase auth: " + resp.status);
+  return resp.json();
+}
+
+async function ensureFbToken() {
+  if (!firebaseAuthEnabled()) return null;
+  /* Параллельные вызовы ждут один и тот же запрос. */
+  if (fbAuth.pending) return fbAuth.pending;
+  fbAuth.pending = (async () => {
+    /* Запас 5 минут, чтобы токен не протух на середине записи. */
+    if (fbAuth.token && Date.now() < fbAuth.expiresAt - 5 * 60 * 1000) {
+      return fbAuth.token;
+    }
+    if (!fbAuth.refresh) fbAuthLoad();
+    if (fbAuth.refresh) {
+      try {
+        const renewed = await fbAuthPost("https://securetoken.googleapis.com/v1/token", {
+          grant_type: "refresh_token",
+          refresh_token: fbAuth.refresh,
+        });
+        fbAuth.token = renewed.id_token;
+        fbAuth.refresh = renewed.refresh_token;
+        fbAuth.uid = renewed.user_id || fbAuth.uid;
+        fbAuth.expiresAt = Date.now() + Number(renewed.expires_in) * 1000;
+        fbAuthSave();
+        return fbAuth.token;
+      } catch (e) {
+        fbAuth.refresh = null;
+      }
+    }
+    const fresh = await fbAuthPost("https://identitytoolkit.googleapis.com/v1/accounts:signUp", {
+      returnSecureToken: true,
+    });
+    fbAuth.token = fresh.idToken;
+    fbAuth.refresh = fresh.refreshToken;
+    fbAuth.uid = fresh.localId || null;
+    fbAuth.expiresAt = Date.now() + Number(fresh.expiresIn) * 1000;
+    fbAuthSave();
+    return fbAuth.token;
+  })();
+  try {
+    return await fbAuth.pending;
+  } finally {
+    fbAuth.pending = null;
+  }
+}
+
+/* Тот же адрес базы, но с токеном. Без настроенного ключа возвращает как есть. */
+async function sharedUrlWithAuth(url) {
+  let token = null;
+  try {
+    token = await ensureFbToken();
+  } catch (e) {
+    /* auth недоступен (офлай��, не настроен) — пробуем без токена */
+  }
+  if (!token) return url;
+  return url + (url.indexOf("?") === -1 ? "?" : "&") + "auth=" + token;
+}
+
+function sharedSwapsUrl() {
+  try {
+    const forced = new URLSearchParams(window.location.search).get("swaps-cloud");
+    if (forced) return forced;
+  } catch (e) {}
+  return SHARED_SWAPS_URL;
+}
+
+function sharedSwapsEnabled() {
+  return Boolean(sharedSwapsUrl());
+}
+
+/* Записи по уже прошедшим дням выкидываем, чтобы корзина не разрасталась. */
+function pruneSwapMap(map) {
+  let changed = false;
+  const horizon = Date.now() - 86400000;
+  for (const key in map) {
+    const datePart = (key.split("|")[1] || "").slice(0, 10);
+    const end = new Date(datePart + "T23:59:59");
+    if (!isNaN(end) && end.getTime() < horizon) {
+      delete map[key];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/* Склейка двух карт замен: у каждого ключа побеждает запись со свежим updatedAt. */
+function mergeSwapMaps(base, incoming) {
+  let changed = false;
+  for (const key in incoming) {
+    const inc = incoming[key];
+    if (!inc || typeof inc !== "object") continue;
+    const incT = typeof inc.updatedAt === "number" ? inc.updatedAt : 0;
+    const cur = base[key];
+    const curT = cur && typeof cur.updatedAt === "number" ? cur.updatedAt : 0;
+    if (!cur || incT >= curT) {
+      if (JSON.stringify(cur) !== JSON.stringify(inc)) {
+        base[key] = inc;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+/* ---------- вход через Telegram и роли ----------
+   Виджет Telegram вызывает window.onTelegramAuth; подпись проверяем по
+   sha256 токена бота (сам токен в коде не хранится!). Роль живёт в облаке:
+   первый вошедший становится владельцем, владелец выдаёт редакторов.
+   Права дополнительно режутся правилами базы (firebase-rules.json). */
+var TG_SESSION_KEY = "weekly:tg-session:v1";
+var tgSession = null;
+var tgRoles = { owner: null, editors: {}, boundTg: null };
+var pendingMap = {};
+var tgRegisterState = "idle";
+
+function tgConfigured() {
+  return Boolean(TELEGRAM_BOT_NAME && TELEGRAM_BOT_TOKEN_SHA256);
+}
+
+function tgDisplayName(user) {
+  const full = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+  return full || (user.username ? "@" + user.username : "участник");
+}
+
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+
+async function hmacSha256Hex(keyBytes, text) {
+  const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* Подпись виджета: строка "key=value" по алфавиту через \n, HMAC-SHA256 от sha256(токена). */
+async function verifyTgAuth(payload) {
+  try {
+    if (!payload || !payload.id || !payload.hash || !payload.auth_date) return false;
+    const keys = Object.keys(payload)
+      .filter((k) => k !== "hash" && payload[k] !== undefined && payload[k] !== null && payload[k] !== "")
+      .sort();
+    const check = keys.map((k) => k + "=" + payload[k]).join("\n");
+    const hex = await hmacSha256Hex(hexToBytes(TELEGRAM_BOT_TOKEN_SHA256), check);
+    return hex === String(payload.hash).toLowerCase();
+  } catch (e) {
+    return false;
+  }
+}
+
+function saveTgSession() {
+  try {
+    if (tgSession) localStorage.setItem(TG_SESSION_KEY, JSON.stringify(tgSession));
+    else localStorage.removeItem(TG_SESSION_KEY);
+  } catch (e) {
+    /* приватный режим */
+  }
+}
+
+function loadTgSession() {
+  try {
+    const raw = localStorage.getItem(TG_SESSION_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || !data.id || !data.hash || !data.auth_date) return;
+    /* Сессия живёт 30 дней, потом попросим войти заново. */
+    if (Math.abs(Date.now() / 1000 - Number(data.auth_date)) > 30 * 86400) return;
+    tgSession = data;
+    /* Фоново перепроверяем подпись — мало ли, кто-то правил localStorage. */
+    verifyTgAuth(data).then((ok) => {
+      if (!ok) tgLogout();
+    });
+  } catch (e) {
+    /* приватный режим */
+  }
+}
+
+function tgLogout() {
+  tgSession = null;
+  tgRoles = { owner: tgRoles.owner, editors: tgRoles.editors, boundTg: null };
+  tgRegisterState = "idle";
+  pendingMap = {};
+  saveTgSession();
+  updateTgButton();
+}
+
+window.onTelegramAuth = function (payload) {
+  verifyTgAuth(payload).then((ok) => {
+    if (!ok) {
+      toast("вход не подтвердился — попробуй ещё раз");
+      return;
+    }
+    tgSession = payload;
+    tgRegisterState = "idle";
+    saveTgSession();
+    updateTgButton();
+    renderTgSheetBody();
+    toast("привет, " + tgDisplayName(payload) + "!");
+    tgSyncRoles().then(pullSharedSwaps);
+  });
+};
+
+function myRole() {
+  if (!tgSession) return "anon";
+  const tg = tgRoles.boundTg || String(tgSession.id);
+  if (tgRoles.owner && tgRoles.owner === tg) return "owner";
+  if (tgRoles.editors && tgRoles.editors[tg]) return "editor";
+  return "user";
+}
+
+function swapPrimaryLabel() {
+  const role = myRole();
+  if (role === "owner" || role === "editor") return "опубликовать";
+  if (role === "user") return "предложить";
+  return "сохранить у себя";
+}
+
+function swapAccessHint() {
+  if (!tgConfigured() || !sharedSwapsEnabled()) return "";
+  const role = myRole();
+  if (role === "anon") {
+    return '<p class="weekly-replace-hint">сохранится только на этом устройстве. войди через Telegram (кнопка в шапке) — замена уйдёт редактору на проверку и станет общей</p>';
+  }
+  if (role === "user") {
+    return '<p class="weekly-replace-hint">у тебя применится сразу, всем остальным — по��ле проверки редактором</p>';
+  }
+  return "";
+}
+
+/* Регистрация: привязываем анонимный uid устройства к Telegram id (один раз),
+   первый вошедший клеймит владельца. Права проверяются правилами базы. */
+async function tgRegister() {
+  if (tgRegisterState === "done" || tgRegisterState === "pending") return;
+  tgRegisterState = "pending";
+  try {
+    const token = await ensureFbToken();
+    if (!token || !fbAuth.uid) throw new Error("нет firebase-сессии");
+    const mine = String(tgSession.id);
+    const regUrl = await sharedUrlWithAuth(cloudRoot() + "/weeqo-users/" + fbAuth.uid + ".json");
+    const regResp = await fetch(regUrl, { headers: { Accept: "application/json" }, cache: "no-store" });
+    const bound = regResp.ok ? await regResp.json() : null;
+    if (bound === null) {
+      const put = await fetch(regUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mine),
+      });
+      if (!put.ok) throw new Error("регистрация отклонена: " + put.status);
+      tgRoles.boundTg = mine;
+    } else {
+      /* На этом устройстве уже входили в другой Telegram — права по старой привязке. */
+      tgRoles.boundTg = String(bound);
+    }
+    const ownerUrl = await sharedUrlWithAuth(cloudRoot() + "/weeqo-meta/owner.json");
+    const ownerResp = await fetch(ownerUrl, { headers: { Accept: "application/json" }, cache: "no-store" });
+    const owner = ownerResp.ok ? await ownerResp.json() : null;
+    if (owner === null) {
+      /* Правила пропускают только самую первую запись — гонка не страшна. */
+      await fetch(ownerUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tgRoles.boundTg),
+      });
+    }
+    tgRegisterState = "done";
+  } catch (e) {
+    tgRegisterState = "idle"; /* повторим в следующий тик опроса */
+    throw e;
+  }
+}
+
+async function tgSyncRoles() {
+  if (!tgSession || !tgConfigured()) return;
+  try {
+    await tgRegister();
+    const root = cloudRoot();
+    const [ownerResp, editorsResp] = await Promise.all([
+      fetch(await sharedUrlWithAuth(root + "/weeqo-meta/owner.json"), { headers: { Accept: "application/json" }, cache: "no-store" }),
+      fetch(await sharedUrlWithAuth(root + "/weeqo-editors.json"), { headers: { Accept: "application/json" }, cache: "no-store" }),
+    ]);
+    if (ownerResp.ok) tgRoles.owner = await ownerResp.json();
+    const editors = editorsResp.ok ? await editorsResp.json() : null;
+    tgRoles.editors = editors && typeof editors === "object" ? editors : {};
+    updateTgButton();
+  } catch (e) {
+    /* офлайн — роли останутся от прошлого тика */
+  }
+}
+
+/* Корень базы без имени файла: из ".../weeqo-swaps.json" делаем "...". */
+function cloudRoot() {
+  return sharedSwapsUrl().replace(/\/[^/]*\.json.*$/, "");
+}
+
+/* В ключах замен есть "/" (группы вида "тм-303/б") и могут быть точки —
+   Firebase та��ое в ключах не прин��мает, поэтому кодируем. */
+function encodeSwapKey(key) {
+  return encodeURIComponent(key).replace(/\./g, "%2E");
+}
+
+function decodeSwapKey(enc) {
+  try {
+    return decodeURIComponent(enc);
+  } catch (e) {
+    return enc;
+  }
+}
+
+function decodeSwapEntries(data) {
+  const out = {};
+  for (const enc in data) out[decodeSwapKey(enc)] = data[enc];
+  return out;
+}
+
+/* Единая точка записи: PUT с телом или DELETE (body === null). true = база приняла. */
+async function cloudWrite(path, body) {
+  try {
+    const url = await sharedUrlWithAuth(cloudRoot() + "/" + path + ".json");
+    const resp = await fetch(
+      url,
+      body === null
+        ? { method: "DELETE" }
+        : { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    );
+    if (!resp.ok) console.warn("weeqo: база отклонила запись (" + resp.status + ") " + path);
+    return resp.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* Редактор/владелец: замена уходит сразу в опубликованные, по одной записи. */
+async function pushSwapEntry(key, entry) {
+  const payload = Object.assign({}, entry);
+  delete payload.pendingSync;
+  if (tgSession) {
+    payload.by = String(tgSession.id);
+    payload.byName = tgDisplayName(tgSession);
+  }
+  const ok = await cloudWrite("weeqo-swaps/" + encodeSwapKey(key), payload);
+  if (ok) {
+    if (entry.pendingSync) {
+      delete entry.pendingSync;
+      saveSwaps();
+    }
+  } else {
+    entry.pendingSync = true;
+    saveSwaps();
+  }
+  return ok;
+}
+
+/* Обычный участник: замена уходит заявкой на проверку. */
+async function proposeSwapEntry(key, entry) {
+  if (!tgSession) return false;
+  const payload = Object.assign({}, entry, {
+    by: String(tgSession.id),
+    byName: tgDisplayName(tgSession),
+  });
+  delete payload.pendingSync;
+  const ok = await cloudWrite("weeqo-pending/" + encodeSwapKey(key), payload);
+  if (!ok) toast("не отправилось — проверь интернет");
+  return ok;
+}
+
+/* Куда уходит замена после сохранения — зависит от роли. */
+function publishSwapKey(key) {
+  if (!sharedSwapsEnabled() || !tgConfigured()) return;
+  const entry = loadSwaps()[key];
+  if (!entry) return;
+  const role = myRole();
+  if (role === "owner" || role === "editor") {
+    pushSwapEntry(key, entry);
+  } else if (role === "user") {
+    proposeSwapEntry(key, entry).then((ok) => {
+      if (ok) toast("отправлено на проверку");
+    });
+  }
+  /* anon: остаётся локально, подсказка уже есть в окне замены */
+}
+
+async function pullPending() {
+  try {
+    const resp = await fetch(await sharedUrlWithAuth(cloudRoot() + "/weeqo-pending.json"), {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const data = resp.ok ? await resp.json() : null;
+    pendingMap = data && typeof data === "object" ? data : {};
+  } catch (e) {
+    /* офлайн */
+  }
+  updateTgButton();
+  renderTgSheetBody();
+}
+
+async function approvePending(enc) {
+  const entry = pendingMap[enc];
+  if (!entry) return;
+  const ok = await cloudWrite("weeqo-swaps/" + enc, entry);
+  if (!ok) {
+    toast("не получилось опубликовать");
+    return;
+  }
+  await cloudWrite("weeqo-pending/" + enc, null);
+  delete pendingMap[enc];
+  /* Применяем локально сразу, не дожидаясь опроса. */
+  const map = loadSwaps();
+  const key = decodeSwapKey(enc);
+  const cur = map[key];
+  if (!cur || typeof cur.updatedAt !== "number" || cur.updatedAt <= entry.updatedAt) {
+    map[key] = Object.assign({}, entry);
+    saveSwaps();
+  }
+  updateTgButton();
+  renderTgSheetBody();
+  render();
+  toast("замена опубликована");
+}
+
+async function rejectPending(enc) {
+  const ok = await cloudWrite("weeqo-pending/" + enc, null);
+  if (!ok) {
+    toast("не получилось отклонить");
+    return;
+  }
+  delete pendingMap[enc];
+  updateTgButton();
+  renderTgSheetBody();
+}
+
+async function grantEditor(tgId, name) {
+  const ok = await cloudWrite("weeqo-editors/" + tgId, name || "редактор");
+  if (!ok) {
+    toast("не получилось выдать доступ");
+    return;
+  }
+  toast("редактор добавлен");
+  await tgSyncRoles();
+  renderTgSheetBody();
+}
+
+async function revokeEditor(tgId) {
+  const ok = await cloudWrite("weeqo-editors/" + tgId, null);
+  if (!ok) {
+    toast("не получилось убрать");
+    return;
+  }
+  await tgSyncRoles();
+  renderTgSheetBody();
+}
+
+/* ---------- тосты ---------- */
+var toastTimer = null;
+function toast(text) {
+  let el = document.getElementById("weeqo-toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "weeqo-toast";
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.add("is-visible");
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => el.classList.remove("is-visible"), 2600);
+}
+
+async function pullSharedSwaps() {
+  const url = sharedSwapsUrl();
+  if (!url) return;
+  /* Пока открыт редактор замены, сеть не дёргаем, чтобы не потерять ввод. */
+  if (document.getElementById("swap-backdrop")) return;
+  try {
+    const resp = await fetch(await sharedUrlWithAuth(url), { headers: { Accept: "application/json" }, cache: "no-store" });
+    let remote = {};
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && typeof data === "object") remote = decodeSwapEntries(data);
+    }
+    const map = loadSwaps();
+    const changedLocal = mergeSwapMaps(map, remote) || pruneSwapMap(map);
+    if (changedLocal) {
+      saveSwaps();
+      if (!scrub && !document.getElementById("swap-backdrop")) render();
+    }
+    /* Редакторы дожимают записи, не ушедшие из-за офлайна. */
+    if (myRole() === "owner" || myRole() === "editor") {
+      for (const key in map) {
+        if (map[key] && map[key].pendingSync) pushSwapEntry(key, map[key]);
+      }
+    }
+  } catch (e) {
+    /* офлайн — повторим в следующий тик */
+  }
+  if (tgConfigured() && tgSession) {
+    await tgSyncRoles();
+    if (myRole() === "owner" || myRole() === "editor") pullPending();
+  }
+}
+
+/* ---------- окно Telegram: вход, заявки, редакторы ---------- */
+
+function updateTgButton() {
+  const btn = document.getElementById("tg-btn");
+  if (!btn) return;
+  if (!tgConfigured() || !sharedSwapsEnabled()) {
+    btn.hidden = true;
+    return;
+  }
+  btn.hidden = false;
+  btn.classList.toggle("is-auth", Boolean(tgSession));
+  btn.setAttribute("aria-label", tgSession ? "аккаунт: " + tgDisplayName(tgSession) : "войти через Telegram");
+  const badge = document.getElementById("tg-badge");
+  if (badge) {
+    const count = Object.keys(pendingMap).length;
+    const canReview = myRole() === "owner" || myRole() === "editor";
+    badge.hidden = !(canReview && count > 0);
+    badge.textContent = String(count);
+  }
+}
+
+function mountTelegramWidget(container) {
+  if (!container) return;
+  container.innerHTML = "";
+  const script = document.createElement("script");
+  script.src = "https://telegram.org/js/telegram-widget.js?22";
+  script.setAttribute("data-telegram-login", TELEGRAM_BOT_NAME);
+  script.setAttribute("data-size", "large");
+  script.setAttribute("data-onauth", "onTelegramAuth");
+  script.async = true;
+  container.appendChild(script);
+}
+
+function closeTgSheet() {
+  const backdrop = document.getElementById("tg-backdrop");
+  if (!backdrop) return;
+  backdrop.classList.remove("is-open");
+  window.setTimeout(() => backdrop.remove(), 160);
+}
+
+function pendingRowHtml(enc, entry, role) {
+  const key = decodeSwapKey(enc);
+  const m = key.match(/\|(\d{4}-\d{2}-\d{2}):(\d+)$/);
+  let when = key;
+  if (m) when = dateLabel(dateFromIso(m[1])) + " · " + m[2] + " пара";
+  let what = "изменение";
+  if (entry.deleted) what = "сброс замены";
+  else if (entry.cancelled) what = "отмена пары";
+  else {
+    const parts = [entry.subject, entry.teacher, entry.room].filter(Boolean);
+    if (parts.length) what = parts.join(" · ");
+  }
+  const who = entry.byName || "без имени";
+  let actions =
+    '<button class="is-primary" type="button" data-tg="approve" data-key="' + escapeHtml(enc) + '">принять</button>' +
+    '<button type="button" data-tg="reject" data-key="' + escapeHtml(enc) + '">отклонить</button>';
+  if (role === "owner" && entry.by && entry.by !== String(tgRoles.owner) && !tgRoles.editors[entry.by]) {
+    actions +=
+      '<button type="button" data-tg="grant" data-key="' + escapeHtml(enc) + '" data-tgid="' +
+      escapeHtml(String(entry.by)) + '">+ редактор</button>';
+  }
+  return (
+    '<div class="weekly-tg-row"><div class="weekly-tg-row-text"><strong>' + escapeHtml(what) + "</strong><span>" +
+    escapeHtml(when) + " · предложил(а): " + escapeHtml(who) +
+    '</span></div><div class="weekly-tg-row-actions">' + actions + "</div></div>"
+  );
+}
+
+function renderTgSheetBody() {
+  const body = document.getElementById("tg-sheet-body");
+  if (!body) return;
+  if (!tgSession) {
+    body.innerHTML =
+      '<div class="weekly-replace-head"><strong>вход через Telegram</strong><span>чтобы предлагать замены</span></div>' +
+      '<div class="weekly-tg-widget" id="tg-widget-mount"></div>' +
+      '<p class="weekly-replace-hint">кнопка работает только на опубликованном сайте — домен привязывается к боту через /setdomain у @BotFather. после входа твои замены уходят редактору на проверку.</p>' +
+      '<div class="weekly-replace-actions"><button type="button" data-tg="close">закрыть</button></div>';
+    mountTelegramWidget(body.querySelector("#tg-widget-mount"));
+    return;
+  }
+  const role = myRole();
+  const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "участник";
+  let html =
+    '<div class="weekly-replace-head"><strong>' + escapeHtml(tgDisplayName(tgSession)) + "</strong><span>" + roleLabel + "</span></div>";
+  if (role === "owner" || role === "editor") {
+    const keys = Object.keys(pendingMap).sort((a, b) => (pendingMap[b].updatedAt || 0) - (pendingMap[a].updatedAt || 0));
+    html += '<div class="weekly-tg-section"><span>заявки (' + keys.length + ")</span>";
+    if (!keys.length) html += '<p class="weekly-replace-hint">пока пусто</p>';
+    keys.forEach((enc) => {
+      html += pendingRowHtml(enc, pendingMap[enc], role);
+    });
+    html += "</div>";
+  }
+  if (role === "owner") {
+    const ids = Object.keys(tgRoles.editors);
+    html += '<div class="weekly-tg-section"><span>редакторы</span>';
+    if (!ids.length) html += '<p class="weekly-replace-hint">пока нет. выдать доступ можно кнопкой «+ редактор» в любой заявке.</p>';
+    ids.forEach((tg) => {
+      html +=
+        '<div class="weekly-tg-row"><div class="weekly-tg-row-text"><strong>' + escapeHtml(String(tgRoles.editors[tg])) +
+        '</strong></div><div class="weekly-tg-row-actions"><button type="button" data-tg="revoke" data-tgid="' +
+        escapeHtml(tg) + '">убрать</button></div></div>';
+    });
+    html += "</div>";
+  }
+  html +=
+    '<div class="weekly-replace-actions"><button type="button" data-tg="logout">выйти</button>' +
+    '<button type="button" data-tg="close">закрыть</button></div>';
+  body.innerHTML = html;
+}
+
+function openTgSheet() {
+  closeTgSheet();
+  if (!tgConfigured()) return;
+  const backdrop = document.createElement("div");
+  backdrop.id = "tg-backdrop";
+  backdrop.className = "weekly-replace-backdrop";
+  backdrop.innerHTML =
+    '<div class="weekly-replace-sheet weekly-tg-sheet" role="dialog" aria-label="Telegram"><div id="tg-sheet-body"></div></div>';
+  document.body.appendChild(backdrop);
+  window.requestAnimationFrame(() => backdrop.classList.add("is-open"));
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) {
+      closeTgSheet();
+      return;
+    }
+    const el = e.target.closest("[data-tg]");
+    if (!el) return;
+    const act = el.dataset.tg;
+    if (act === "close") closeTgSheet();
+    else if (act === "logout") {
+      tgLogout();
+      closeTgSheet();
+      render();
+    } else if (act === "approve") approvePending(el.dataset.key);
+    else if (act === "reject") rejectPending(el.dataset.key);
+    else if (act === "grant") {
+      const entry = pendingMap[el.dataset.key] || {};
+      grantEditor(el.dataset.tgid, entry.byName);
+    } else if (act === "revoke") revokeEditor(el.dataset.tgid);
+  });
+  renderTgSheetBody();
+  if (myRole() === "owner" || myRole() === "editor") pullPending();
+}
+
+/* ---------- журнал обновлений расписания («?» внизу настроек) ---------- */
+var scheduleUpdatedAt = null;
+
+/* Компактный штамп данных в шапке справа от бейджа чётности недели. */
+function fmtStamp(isoValue) {
+  const d = new Date(isoValue);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = d.toLocaleDateString("ru", { day: "numeric", month: "short" }).replace(/\./g, "");
+  const time = d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+  return day + " " + time;
+}
+
+function renderDataStamp() {
+  const el = $("#data-stamp");
+  if (!el) return;
+  const offline = typeof navigator !== "undefined" && !navigator.onLine;
+  const when = scheduleUpdatedAt ? fmtStamp(scheduleUpdatedAt) : "";
+  if (!when) {
+    /* Данных ещё не было: пишем только «офлайн», иначе прячем. */
+    el.textContent = offline ? "офлайн" : "";
+    el.hidden = !offline;
+    return;
+  }
+  el.hidden = false;
+  el.textContent = offline ? "офлайн · " + when : "обн. " + when;
+}
+
+function fmtDateTime(isoValue) {
+  const d = new Date(isoValue);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("ru", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+}
+
+function closeUpdatesSheet() {
+  const backdrop = document.getElementById("updates-backdrop");
+  if (!backdrop) return;
+  backdrop.classList.remove("is-open");
+  window.setTimeout(() => backdrop.remove(), 160);
+}
+
+function updatesRowHtml(entry) {
+  const when = fmtDateTime(entry.at);
+  const details = Array.isArray(entry.details) ? entry.details : [];
+  return (
+    '<div class="weekly-tg-row"><div class="weekly-tg-row-text"><strong>' +
+    escapeHtml((entry.group || "?") + (entry.summary ? " · " + entry.summary : "")) +
+    "</strong><span>" + escapeHtml(when) + "</span>" +
+    details.map((d) => "<span>" + escapeHtml(d) + "</span>").join("") +
+    "</div></div>"
+  );
+}
+
+function renderUpdatesBody(data) {
+  const body = document.getElementById("updates-sheet-body");
+  if (!body) return;
+  const stamp = scheduleUpdatedAt
+    ? "данные обновлены: " + fmtDateTime(scheduleUpdatedAt)
+    : "данные ещё не загружались";
+  let html =
+    '<div class="weekly-replace-head"><strong>обновления расписания</strong><span>' +
+    escapeHtml(stamp) + "</span></div>";
+  const entries = data && Array.isArray(data.entries) ? data.entries : [];
+  if (!entries.length) {
+    html +=
+      '<p class="weekly-replace-hint weekly-updates-empty">изменений пока не было. как только парсер найдёт отличия в PDF колледжа, они появятся здесь — по каждой группе отдельно.</p>';
+  } else {
+    html += '<div class="weekly-tg-section"><span>изменения по всем группам (' + entries.length + ")</span>";
+    entries.forEach((entry) => {
+      html += updatesRowHtml(entry);
+    });
+    html += "</div>";
+  }
+  html += '<div class="weekly-replace-actions"><button type="button" data-updates="close">закрыть</button></div>';
+  body.innerHTML = html;
+}
+
+function openUpdatesSheet() {
+  closeUpdatesSheet();
+  const backdrop = document.createElement("div");
+  backdrop.id = "updates-backdrop";
+  backdrop.className = "weekly-replace-backdrop";
+  backdrop.innerHTML =
+    '<div class="weekly-replace-sheet weekly-tg-sheet" role="dialog" aria-label="обновления расписания"><div id="updates-sheet-body"></div></div>';
+  document.body.appendChild(backdrop);
+  window.requestAnimationFrame(() => backdrop.classList.add("is-open"));
+  backdrop.addEventListener("click", (e) => {
+    /* Клики по этому окну не должны закрывать настройки под ним —
+       у поповера закрытие по клику вне его, стопаем всплытие. */
+    e.stopPropagation();
+    if (e.target === backdrop || e.target.closest('[data-updates="close"]')) closeUpdatesSheet();
+  });
+  renderUpdatesBody(null);
+  fetch("data/changelog.json?t=" + Date.now(), { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then(renderUpdatesBody)
+    .catch(() => renderUpdatesBody(null));
+}
+
+/* Ручное обновление из настроек: перечитывает расписание и замены. */
+var refreshInFlight = false;
+
+function manualRefresh(btn) {
+  if (refreshInFlight) return;
+  refreshInFlight = true;
+  btn.disabled = true;
+  const icon = btn.querySelector(".weekly-settings-icon svg");
+  if (icon) icon.classList.add("is-spinning");
+  /* Замены тянем параллельно, у них своя защита от ошибок сети. */
+  Promise.resolve(pullSharedSwaps()).catch(() => {});
+  refreshSchedule(true)
+    .then((applied) => toast(applied ? "данные обновлены" : "не удалось обновить — проверь интернет"))
+    .catch(() => toast("не удалось обновить — проверь интернет"))
+    .finally(() => {
+      refreshInFlight = false;
+      btn.disabled = false;
+      if (icon) icon.classList.remove("is-spinning");
+    });
+}
+
+(function initUpdates() {
+  const btn = document.getElementById("go-updates");
+  if (btn) btn.addEventListener("click", openUpdatesSheet);
+  const refreshBtn = document.getElementById("go-refresh");
+  if (refreshBtn) refreshBtn.addEventListener("click", () => manualRefresh(refreshBtn));
+  window.addEventListener("online", renderDataStamp);
+  window.addEventListener("offline", renderDataStamp);
+  renderDataStamp();
+})();
+
+(function initTg() {
+  const btn = document.getElementById("tg-btn");
+  if (btn) btn.addEventListener("click", openTgSheet);
+  loadTgSession();
+  updateTgButton();
+})();
+
+(function startSharedSwaps() {
+  if (!sharedSwapsEnabled()) return;
+  window.setTimeout(pullSharedSwaps, 1200);
+  sharedSync.poll = window.setInterval(pullSharedSwaps, 45000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) pullSharedSwaps();
+  });
+})();

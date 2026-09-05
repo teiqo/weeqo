@@ -11,6 +11,10 @@
 - группы, которые не удалось разобрать, остаются из старого файла;
 - если итог в целом хуже старого файла — файл не трогаем, выход с кодом 1
   (workflow упадёт и НЕ закоммитит мусор).
+
+Если содержимое не изменилось, файл не перезаписывается: updatedAt означает
+последнее РЕАЛЬНОЕ изменение данных, а пустых коммитов нет. Изменения по
+группам пишутся в data/changelog.json — их показывает кнопка «?» в настройках.
 """
 import datetime
 import json
@@ -200,6 +204,94 @@ def day_count(days):
     return sum(len(items) for items in days.values())
 
 
+CHANGELOG_OUT = os.path.join(os.path.dirname(OUT), "changelog.json")
+CHANGELOG_LIMIT = 60
+DAY_SHORT = {1: "пн", 2: "вт", 3: "ср", 4: "чт", 5: "пт", 6: "сб"}
+
+
+def slot_key(item):
+    """Полная сигнатура пары для сравнения старого и нового разбора."""
+    extra = item[4] if len(item) > 4 and isinstance(item[4], dict) else {}
+    return (
+        item[0],
+        str(item[1]),
+        str(item[2] or ""),
+        str(item[3] or ""),
+        str(extra.get("parity") or ""),
+        bool(extra.get("self")),
+    )
+
+
+def slot_label(item):
+    label = str(item[1])
+    bits = [str(b) for b in (item[2], item[3]) if b]
+    if bits:
+        label += " (" + ", ".join(bits) + ")"
+    if len(item) > 4 and isinstance(item[4], dict):
+        if item[4].get("parity") == "even":
+            label += " [чёт]"
+        elif item[4].get("parity") == "odd":
+            label += " [неч]"
+        if item[4].get("self"):
+            label += " [сам.работа]"
+    return label
+
+
+def diff_schedules(old_map, new_map, at):
+    """Изменения по каждой группе: [{at, group, summary, details}]."""
+    entries = []
+    for gid in sorted(set(old_map) | set(new_map)):
+        old_g = old_map.get(gid)
+        new_g = new_map.get(gid)
+        details = []
+        summary = ""
+        if old_g is None:
+            summary = "новая группа"
+            details.append("пар распознано: %d" % day_count(new_g.get("days") or {}))
+        elif new_g is None:
+            summary = "группа удалена"
+            details.append("была удалена из нового разбора")
+        else:
+            old_days = old_g.get("days") or {}
+            new_days = new_g.get("days") or {}
+            for day in sorted(set(old_days) | set(new_days), key=lambda d: int(d)):
+                old_slots = {slot_key(s): s for s in old_days.get(day) or [] if isinstance(s, list) and len(s) >= 2}
+                new_slots = {slot_key(s): s for s in new_days.get(day) or [] if isinstance(s, list) and len(s) >= 2}
+                dname = DAY_SHORT.get(int(day), str(day))
+                for key in sorted(set(new_slots) - set(old_slots)):
+                    s = new_slots[key]
+                    details.append("+ %s %d пара: %s" % (dname, s[0], slot_label(s)))
+                for key in sorted(set(old_slots) - set(new_slots)):
+                    s = old_slots[key]
+                    details.append("− %s %d пара: %s" % (dname, s[0], slot_label(s)))
+            added = sum(1 for d in details if d.startswith("+"))
+            removed = sum(1 for d in details if d.startswith("−"))
+            if added or removed:
+                summary = "+%d −%d" % (added, removed)
+        if not details:
+            continue
+        if len(details) > 8:
+            details = details[:8] + ["… и ещё %d" % (len(details) - 8)]
+        entries.append({
+            "at": at,
+            "group": (new_g or old_g).get("name") or gid,
+            "summary": summary,
+            "details": details,
+        })
+    return entries
+
+
+def load_changelog():
+    try:
+        with open(CHANGELOG_OUT, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict) and isinstance(data.get("entries"), list):
+            return data
+    except Exception:
+        pass
+    return {"entries": []}
+
+
 def load_old():
     try:
         with open(OUT, encoding="utf-8") as fh:
@@ -282,8 +374,18 @@ def main():
             print("разбор слишком бедный: занятий %d" % total, file=sys.stderr)
             return 1
 
+    old_groups_list = (old or {}).get("groups") or []
+    changed = (not old) or (
+        json.dumps(groups, ensure_ascii=False, sort_keys=True)
+        != json.dumps(old_groups_list, ensure_ascii=False, sort_keys=True)
+    )
+    if not changed:
+        print("без изменений: групп %d, пар %d" % (len(groups), total))
+        return 0
+
+    now_iso = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
     payload = {
-        "updatedAt": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
+        "updatedAt": now_iso,
         "source": PDF_URL,
         "groups": groups,
     }
@@ -291,6 +393,18 @@ def main():
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=1, sort_keys=False)
         fh.write("\n")
+
+    # Журнал изменений для кнопки «?» в настройках — только при реальных отличиях.
+    old_map = {str(g.get("id", "")).lower(): g for g in old_groups_list if isinstance(g, dict)}
+    if old_map:
+        entries = diff_schedules(old_map, {g["id"]: g for g in groups}, now_iso)
+        if entries:
+            changelog = load_changelog()
+            changelog["entries"] = (entries + changelog.get("entries", []))[:CHANGELOG_LIMIT]
+            with open(CHANGELOG_OUT, "w", encoding="utf-8") as fh:
+                json.dump(changelog, fh, ensure_ascii=False, indent=1)
+                fh.write("\n")
+            print("журнал: +%d записей" % len(entries))
     print("готово: групп %d, занятий %d" % (len(groups), total))
     return 0
 

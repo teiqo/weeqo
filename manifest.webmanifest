@@ -11,13 +11,13 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "images/weekly.svg",
+      "src": "images/weeqo-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "images/weekly-180.png",
+      "src": "images/weeqo-180.png",
       "sizes": "180x180",
       "type": "image/png"
     }
