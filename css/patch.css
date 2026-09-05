@@ -1,3 +1,17 @@
+/* ---------- шрифт Inter (variable, вшит локально) ---------- */
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- лоадер сразу берёт фон темы, без белой вспышки при обновлении ---------- */
+.app-loading-state {
+  background: var(--weekly-bg, #f5f5f7);
+}
+
 /* доправки поверх стилей оригинала — анимации смены дня/рулетки берутся из weekly-*.css как на csu.noteven.dev */
 
 /* сцену двигаем через WAAPI от текущего кадра, чтобы прерывание не дёргало прямоугольник */
@@ -1158,7 +1172,7 @@ html.weekly-page #root::-webkit-scrollbar,
 :root[data-weekly-palette] .weekly-palette-toggle i:nth-child(3) { background: var(--palette-accent-3) !important; }
 :root[data-weekly-palette] .weekly-palette-toggle i:nth-child(4) { background: var(--palette-accent-4) !important; }
 
-/* Текст и карточки во всех палитрах повторяют базовый формат. */
+/* Текст и карточки во всех палитрах повторяют ба��овый формат. */
 :root[data-weekly-palette] .agenda-list {
   overflow: hidden;
   border: 1px solid var(--weekly-separator);
@@ -1537,7 +1551,7 @@ html.weekly-page #root::-webkit-scrollbar,
   transition: opacity 0.16s ease;
   /* Панель вешается на body мимо .weekly-app, поэтому шрифт задаём явно —
      тот же стек, что у основного приложения. */
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   letter-spacing: 0;
 }
 
@@ -1910,7 +1924,7 @@ html.weekly-page #root::-webkit-scrollbar,
   color: #6e6e76;
 }
 
-/* ===== акцентная тема: фон, подложки и логотип идут от выбранного цвета ===== */
+/* ===== акцентная ��ема: фон, подложки и логотип идут от выбранного цвета ===== */
 :root[data-weekly-palette="accent"] {
   --weekly-bg: color-mix(in srgb, var(--weekly-accent, #0a84ff) 26%, #05050a);
   --weekly-surface: color-mix(in srgb, var(--weekly-accent, #0a84ff) 30%, #101015);
@@ -2267,7 +2281,7 @@ a.weekly-settings-row.weekly-settings-link strong {
   color: #fff;
 }
 #weeqo-toast {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   position: fixed;
   left: 50%;
   bottom: 24px;
@@ -2289,24 +2303,28 @@ a.weekly-settings-row.weekly-settings-link strong {
   transform: translateX(-50%) translateY(0);
 }
 
-/* ---------- штамп данных справа от бейджа чётности недели ---------- */
-.weekly-week-switch.is-static {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: auto;
-}
+/* ---------- штамп данных: отдельной строкой слева, между бейджем чётности и рулеткой дней ---------- */
 .weekly-data-stamp {
-  font-size: 10.5px;
+  display: flex;
+  justify-content: flex-start;
+  margin: -1px 0 3px;
+  font-size: 9.5px;
   font-weight: 550;
   line-height: 1;
   color: var(--weekly-tertiary);
   white-space: nowrap;
 }
-@media (max-width: 350px) {
-  .weekly-data-stamp {
-    display: none;
-  }
+
+/* ---------- в текущей паре под часами — сколько уже прошло ---------- */
+.live-card-range {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.live-card-range small {
+  font-size: 9.5px;
+  font-weight: 550;
+  opacity: 0.72;
 }
 
 /* ---------- настройки без блюра: затемнение фона остаётся, размытие убрано ---------- */
@@ -2373,4 +2391,33 @@ a.weekly-settings-row.weekly-settings-link strong {
 #refresh-btn svg {
   width: 20px;
   height: 20px;
+}
+
+/* ---------- узкие экраны (телефоны): шапка без каши ---------- */
+/* На 390px и меньше правая зона (тема+обновление+настройки, а с Telegram ещё и
+   кнопка входа) не влезала в свою колонку сетки и налезала на логотип.
+   Решение: логотип оставляем звездой, кнопки компактнее, переключатель темы
+   убираем из шапки (он есть первой строкой в настройках). */
+@media (max-width: 430px) {
+  .weekly-header {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .weekly-header-word,
+  .weekly-header-spark {
+    display: none;
+  }
+  .weekly-header-actions {
+    gap: 4px;
+  }
+  .weekly-header-actions .weekly-settings-trigger,
+  .weekly-header-actions .weekly-tg-btn {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+  .weekly-header-actions .weekly-theme-toggle {
+    display: none;
+  }
 }

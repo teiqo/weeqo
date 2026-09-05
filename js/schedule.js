@@ -85,11 +85,12 @@ export function lessonCount(id) {
 
 /* Расписание с сайта колледжа: data/schedule.json замещает встроенные группы. */
 
-/* Номер аудитории посреди названия = склейка колонок PDF, такую пару отбрасываем. */
+/* Номер аудитории посреди названия = склейка колонок PDF, такую пару отбрасываем.
+   Лимиты как у парсера: длинные предметы вида «МДК 01.01 …» — легальные. */
 function saneSubject(subject) {
-  if (subject.length < 3 || subject.length > 56) return false;
+  if (subject.length < 3 || subject.length > 175) return false;
   const words = subject.split(/\s+/);
-  if (words.length > 6) return false;
+  if (words.length > 20) return false;
   for (let i = 0; i < words.length - 1; i += 1) {
     if (/^\d{2,3}[а-я]?$/.test(words[i])) return false;
   }
@@ -109,6 +110,7 @@ function rawFromRemote(days) {
       if (!n || n < 1 || n > 6) return;
       const subject = String(it[1] || "").trim();
       if (!subject || !saneSubject(subject)) return;
+      if (String(it[2] || "").trim().toLowerCase() === "вакансия") return; // пары-вакансии не показываем
       const extra = it[4] && typeof it[4] === "object" ? it[4] : {};
       list.push([n, subject, it[2] || "", it[3] || "", extra]);
     });

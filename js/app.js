@@ -312,6 +312,7 @@ function liveState(d) {
         kind: "current",
         slot: s,
         left: to - cur,
+        passed: cur - from,
         progress: (cur - from) / (to - from),
         now,
       };
@@ -360,9 +361,9 @@ function liveCardHtml(live) {
       )})"></i></div>`
     : "";
   const timing = current
-    ? `<div class="live-card-timing"><span>${s.from}–${s.to}</span><span id="live-left">осталось ${fmtLeft(
-        live.left
-      )}</span></div>`
+    ? `<div class="live-card-timing"><span class="live-card-range">${s.from}–${s.to}<small id="live-passed">прошло ${fmtLeft(
+        live.passed
+      )}</small></span><span id="live-left">осталось ${fmtLeft(live.left)}</span></div>`
     : `<div class="live-card-timing is-next-timing"><strong id="live-left">через ${fmtLeft(
         live.left
       )}</strong><span class="live-next-range">${s.from}–${s.to}</span></div>`;
@@ -738,8 +739,8 @@ function setScene(html, direction) {
     { duration: dur, easing: ease, fill: "both" }
   );
 
-  /* Каскадные анимации строк длятся дольше с��ены подложки: раньше таймер
-     обр��вал их через dur, и при скролле/быстром листании пары моргали.
+  /* Каскадные анимации строк длятся дольше смены подложки: раньше таймер
+     обрывал их через dur, и при скролле/быстром листании пары моргали.
      Ждём полного каскада и трогаем только свои WAAPI-анимации. */
   const rowDur = cssTimeMs("--duration-fast", 320);
   const rowStep = cssTimeMs("--duration-stagger", 55);
@@ -910,6 +911,8 @@ function tick() {
     left.textContent =
       live.kind === "current" ? `осталось ${fmtLeft(live.left)}` : `через ${fmtLeft(live.left)}`;
   }
+  const passed = $("#live-passed");
+  if (passed && live.kind === "current") passed.textContent = `прошло ${fmtLeft(live.passed)}`;
   if (bar) bar.style.transform = `scaleX(${live.progress.toFixed(3)})`;
 }
 
@@ -919,7 +922,7 @@ function applyTheme() {
   const root = document.documentElement;
   root.dataset.theme = state.theme;
   // Тёмные варианты neutral/opaque больше не переключают тему сами.
-  // Для белого режима и������������п������льзуем отдельные светлые ва��ианты этих же палитр.
+  // Для белого режима используем отдельные светлые варианты этих же палитр.
   if (!PALETTES.includes(state.palette)) state.palette = "default";
   root.dataset.theme = state.theme;
   if (state.palette === "default") root.removeAttribute("data-weekly-palette");
@@ -975,7 +978,7 @@ function applyTheme() {
   applyFlags();
 }
 
-/* ---------- сост��яние ---------- */
+/* ---------- состояние ---------- */
 
 function save() {
   try {
@@ -1115,7 +1118,7 @@ function shiftDay(delta) {
   selectDate(addDays(state.selected, delta), delta > 0 ? "forward" : "backward");
 }
 
-/* ---------- зажать и вести выделени�� по д��ям ---------- */
+/* ---------- зажать и вести выделение по дням ---------- */
 
 let scrub = null;
 let scrubFrame = null;
@@ -1252,7 +1255,7 @@ function activateScrub() {
   if (!scrub || !scrub.pointerDown || scrub.active) return;
   scrub.active = true;
   /* Захватываем указатель только после начала настоящего перетаскивания.
-     Поэтому обычный клик остаётся кликом по самой кноп��е дня. */
+     Поэтому обычный клик остаётся кликом по самой кнопке дня. */
   if (!scrub.strip.hasPointerCapture(scrub.pointerId)) {
     scrub.strip.setPointerCapture(scrub.pointerId);
   }
@@ -1427,7 +1430,7 @@ function bindStrip() {
       step,
       max: lastRect.left - firstRect.left,
       firstCenter: firstRect.left + firstRect.width / 2,
-      /* Курсор цепляет любую нажатую ��чейку, а не только текущую. */
+      /* Курсор цепляет любую нажатую ячейку а не только текущую. */
       grabOffset: e.clientX - (firstRect.left + firstRect.width / 2 + pressedPosition),
       targetIndex: selectedIndex,
       underIndex: selectedIndex,
@@ -1447,7 +1450,7 @@ function bindStrip() {
         /* ignore */
       }
     }
-    /* Долгое удержание больше не требуется: та��мер остаётся только как
+    /* Долгое удержание больше не требуется: таймер остаётся только как
        страховка для случая, когда палец стоит на месте. */
     holdTimer = e.pointerType === "mouse" ? null : window.setTimeout(activateScrub, 45);
   });
@@ -1495,7 +1498,7 @@ function bindStrip() {
 
   strip.addEventListener("pointerup", release);
   strip.addEventListener("pointercancel", () => {
-    /* Если браузер отобрал жест посреди ведения — доводим выбор до конца,
+    /* Если браузер отобрал жест п��среди ведения — доводим выбор до конца,
        а не сбрасываем его назад. */
     if (scrub && scrub.active) settleScrub();
     else endScrub();
@@ -1650,7 +1653,7 @@ function bindEvents() {
   });
 
   /* Свайп по дням: палец тянет сцену за собой, а день меняется уже на
-     отпускании — с обычной анимацией листания. Раньше день переключался
+     отпускании ��� с обычной анимацией листания. Раньше день переключался
      прямо посреди жеста, и анимацию съедал активный скролл. */
   const scene = $("#scene");
   const swipeStage = $("#stage");
@@ -1716,7 +1719,7 @@ function bindEvents() {
       }
       if (swipe.axis !== "x") return;
       swipe.dx = dx;
-      /* резинка: сцена идёт мягче пальца и не ��летает за край */
+      /* резинка: сцена идёт мягче пальца и не улетает за край */
       const eased = Math.sign(dx) * Math.min(Math.abs(dx) * 0.42, 52);
       setSwipeShift(eased);
     },
@@ -1923,7 +1926,7 @@ function onboardingHtml() {
         </div>
         <span class="weekly-onboarding-kicker">weeqo beta</span>
         <h1>только расписание</h1>
-        <p>как это работает? к��ждые 30 минут мы берём расписание с сайта sustec.ru машиностроительного колледжа и загружаем его сюда</p>
+        <p>как это работает? каждые 3 часа мы берём расписание с сайта sustec.ru машиностроительного колледжа и загружаем его сюда</p>
       </div>
       <button class="weekly-onboarding-action" type="button" data-act="next">выбрать группу</button>
     </div>
@@ -2422,11 +2425,11 @@ document.addEventListener("keydown", (e) => {
 })();
 
 /* ---------- автообновление расписания ----------
-   data/schedule.json пересобирает GitHub Action каждый час из PDF
+   data/schedule.json пересобирает GitHub Action каждые 3 часа из PDF
    на sustec.ru, а приложение с тем же шагом его перечитывает. */
 var SCHEDULE_URL = "data/schedule.json";
 var SCHEDULE_CACHE_KEY = "weekly:schedule-cache:v2";
-var SCHEDULE_TTL = 60 * 60 * 1000;
+var SCHEDULE_TTL = 3 * 60 * 60 * 1000;
 var scheduleFetchedAt = 0;
 var scheduleApply = null;
 
@@ -2510,10 +2513,22 @@ function refreshSchedule(force) {
     .catch(() => false);
 }
 
+/* Пока на сервере пусто, проверяем каждые 5 минут, а не раз в час. */
+var scheduleRetryTimer = null;
+
+function planScheduleRetry() {
+  window.clearTimeout(scheduleRetryTimer);
+  scheduleRetryTimer = null;
+  if (GROUPS.length) return;
+  scheduleRetryTimer = window.setTimeout(function () {
+    refreshSchedule(true).then(planScheduleRetry);
+  }, 5 * 60 * 1000);
+}
+
 (function startScheduleUpdates() {
   const cached = cachedSchedulePayload();
   if (cached) applySchedulePayload(cached);
-  refreshSchedule(true);
+  refreshSchedule(true).then(planScheduleRetry);
   window.setInterval(() => refreshSchedule(true), SCHEDULE_TTL);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refreshSchedule(false);
@@ -2522,7 +2537,7 @@ function refreshSchedule(force) {
 })();
 
 /* Слишком светлый акцент на светлом фоне и слишком тёмный на тёмном
-   не читаются, поэтому для текста и иконок берём подправленный оттен��к. */
+   не читаются, поэтому для текста и иконок берём подправленный оттенок */
 function accentLuminance(hex) {
   const n = String(hex || "").replace("#", "");
   if (n.length !== 6) return 0.5;
@@ -2549,7 +2564,7 @@ function readableAccent(hex, theme) {
    Пустая строка = замены хранятся только на устройстве, как раньше.
    Проверить без правки кода можно параметром ?swaps-cloud=адрес. */
 /* Конфиг переехал в js/config.js — правь там, этот файл больше не трогай.
-   Читаем из window с запасными значениями на сл��чай, если config.js не загрузился. */
+   Читаем из window с запасными значениями на случай если config.js не загрузился. */
 var SHARED_SWAPS_URL = window.SHARED_SWAPS_URL || "";
 var FIREBASE_API_KEY = window.FIREBASE_API_KEY || "";
 var TELEGRAM_BOT_NAME = window.TELEGRAM_BOT_NAME || "";
@@ -2557,7 +2572,7 @@ var TELEGRAM_BOT_TOKEN_SHA256 = window.TELEGRAM_BOT_TOKEN_SHA256 || "";
 var sharedSync = { pushing: false, again: false, poll: null };
 
 /* ---------- анонимный вход Firebase ----------
-   Ок��н л��гина нет: приложение само молча получает временный токен через REST,
+   Окон логина нет: приложение само молча получает временный токен через REST,
    а правила базы (".write": "auth != null") пускают запись только с ним.
    Токен живёт час, дальше тихо обновляется по refresh-токену. */
 var fbAuth = { token: null, refresh: null, uid: null, expiresAt: 0, pending: null };
@@ -2649,7 +2664,7 @@ async function sharedUrlWithAuth(url) {
   try {
     token = await ensureFbToken();
   } catch (e) {
-    /* auth недоступен (офлай��, не настроен) — пробуем без токена */
+    /* auth недоступен офлайн не настроен) — пробуем без токена */
   }
   if (!token) return url;
   return url + (url.indexOf("?") === -1 ? "?" : "&") + "auth=" + token;
@@ -2822,7 +2837,7 @@ function swapAccessHint() {
     return '<p class="weekly-replace-hint">сохранится только на этом устройстве. войди через Telegram (кнопка в шапке) — замена уйдёт редактору на проверку и станет общей</p>';
   }
   if (role === "user") {
-    return '<p class="weekly-replace-hint">у тебя применится сразу, всем остальным — по��ле проверки редактором</p>';
+    return '<p class="weekly-replace-hint">у тебя применится сразу, всем остальным — после проверки редактором</p>';
   }
   return "";
 }
@@ -2893,7 +2908,7 @@ function cloudRoot() {
 }
 
 /* В ключах замен есть "/" (группы вида "тм-303/б") и могут быть точки —
-   Firebase та��ое в ключах не прин��мает, поэтому кодируем. */
+   Firebase такое в ключах не принимает поэтому кодируем. */
 function encodeSwapKey(key) {
   return encodeURIComponent(key).replace(/\./g, "%2E");
 }
@@ -3032,7 +3047,7 @@ async function rejectPending(enc) {
 async function grantEditor(tgId, name) {
   const ok = await cloudWrite("weeqo-editors/" + tgId, name || "редактор");
   if (!ok) {
-    toast("не получилось выдать доступ");
+    toast("не получилось выда��ь доступ");
     return;
   }
   toast("редактор добавлен");
@@ -3246,13 +3261,11 @@ function openTgSheet() {
 /* ---------- журнал обновлений расписания («?» внизу настроек) ---------- */
 var scheduleUpdatedAt = null;
 
-/* Компактный штамп данных в шапке справа от бейджа чётности недели. */
+/* Компактный штамп данных в шапке под бейджем чётности: число и время. */
 function fmtStamp(isoValue) {
   const d = new Date(isoValue);
   if (Number.isNaN(d.getTime())) return "";
-  const day = d.toLocaleDateString("ru", { day: "numeric", month: "short" }).replace(/\./g, "");
-  const time = d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
-  return day + " " + time;
+  return d.toLocaleString("ru", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 function renderDataStamp() {
@@ -3261,9 +3274,9 @@ function renderDataStamp() {
   const offline = typeof navigator !== "undefined" && !navigator.onLine;
   const when = scheduleUpdatedAt ? fmtStamp(scheduleUpdatedAt) : "";
   if (!when) {
-    /* Данных ещё не было: пишем только «офлайн», иначе ��рячем. */
-    el.textContent = offline ? "��флайн" : "";
-    el.hidden = !offline;
+    /* Данных ещё нет: показываем, что приложение их ищет (или «офлайн»). */
+    el.textContent = offline ? "офлайн" : "ищем данные…";
+    el.hidden = false;
     return;
   }
   el.hidden = false;
@@ -3369,8 +3382,6 @@ function manualRefresh(btn) {
 (function initUpdates() {
   const btn = document.getElementById("go-updates");
   if (btn) btn.addEventListener("click", openUpdatesSheet);
-  const refreshBtn = document.getElementById("go-refresh");
-  if (refreshBtn) refreshBtn.addEventListener("click", () => manualRefresh(refreshBtn));
   const headRefreshBtn = document.getElementById("refresh-btn");
   if (headRefreshBtn) headRefreshBtn.addEventListener("click", () => manualRefresh(headRefreshBtn));
   window.addEventListener("online", renderDataStamp);

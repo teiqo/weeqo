@@ -1,28 +1,34 @@
 # -*- coding: utf-8 -*-
 """Пересборка data/schedule.json из PDF с сайта колледжа.
 
-Запуск: python3 tools/update_schedule.py
-Требует pdftotext (пакет poppler-utils).
+Запуск: python3 tools/update_schedule.py [локальный.pdf для проверки]
+Требует pdfplumber (pip install pdfplumber).
 
-Защита от плохого разбора:
-- каждая пара проходит проверку на "склейку колонок" PDF (мусор выбрасывается);
-- группа из нового разбора замещает старую только если количество пар
-  правдоподобно (не сильно меньше и не сильно больше прежнего);
-- группы, которые не удалось разобрать, остаются из старого файла;
-- если итог в целом хуже старого файла — файл не трогаем, выход с кодом 1
-  (workflow упадёт и НЕ закоммитит мусор).
+PDF — выгрузка из Excel с линиями сетки. Разбор идёт по координатам:
+- колонки страницы строим по вертикальным линиям таблицы;
+- колонку звонков узнаём по одиночным цифрам 1-6;
+- шифры групп из строки-заголовка привязываем к колонкам по центру слова;
+- страницы-продолжения без заголовка используют колонки текущей секции;
+- границы строк пар — горизонтальные линии через колонку звонков
+  (плюс края таблицы: у страниц-продолжений верхней линии нет);
+- границы блоков дней — горизонтальные линии через полосу дня;
+- подписи дней (вертикальный текст) склеиваем из букв по координатам.
 
-Если содержимое не изменилось, файл не перезаписывается: updatedAt означает
-последнее РЕАЛЬНОЕ изменение данных, а пустых коммитов нет. Изменения по
-группам пишутся в data/changelog.json — их показывает кнопка «?» в настройках.
+Устойчивость:
+- нет сети / битый PDF / бедный разбор — не роняем workflow: старый файл
+  остаётся, скрипт завершается нулём, Action пробует снова через час;
+- группа из нового разбора заменяет старую, только если число пар
+  правдоподобно; группы, пропавшие из разбора, остаются из старого файла;
+- если содержимое не изменилось, файл не перезаписывается: updatedAt
+  означает последнее РЕАЛЬНОЕ изменение данных, пустых коммитов нет.
 """
 import datetime
 import json
 import os
 import re
-import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 
 PDF_URL = (
@@ -30,65 +36,303 @@ PDF_URL = (
     "mso-26-27_raspisanie_1_semestr_2026g_2027g.pdf"
 )
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "schedule.json")
+CHANGELOG_OUT = os.path.join(os.path.dirname(OUT), "changelog.json")
+CHANGELOG_LIMIT = 60
 
-GROUP_RE = re.compile(r"[А-ЯЁ]{2}-\d{3}/[а-яё]")
-BELL_RE = re.compile(r"^\s*([1-6])\s*$")
-ROOM_RE = re.compile(r"\dк\s*-\s*(\d{1,3}[а-я]?)")
-TEACHER_RE = re.compile(r"([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\.\s*([А-ЯЁ])\.")
-EVEN_RE = re.compile(r"Четная\s+неделя", re.I)
-ODD_RE = re.compile(r"Нечетная\s+неделя", re.I)
+GROUP_RE = re.compile(r"^[А-ЯЁ]{2,3}-\d{3}/[а-яё]$")
+DAY_NAMES = {
+    "понедельник": 1,
+    "вторник": 2,
+    "среда": 3,
+    "четверг": 4,
+    "пятница": 5,
+    "суббота": 6,
+}
+BELL_RE = re.compile(r"^[1-6]$")
+
+ROOM_RE = re.compile(r"\d\s*-?\s*к\s*-\s*(\d{1,3}[а-яё]?)")  # «3к - 208» и опечатка «3-к - 208»
+# «Колосов С.М.», вариант без последней точки «Колосов С.М 3к - 04»
+# и склейка «Останина К.Ю.3к - 312».
+TEACHER_RE = re.compile(r"([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\.\s*([А-ЯЁ])\.?")
+# компактная форма без пробела: «Кузовников.В.Г.» / «Кузовников. В.Г.»
+TEACHER_COMPACT_RE = re.compile(r"([А-ЯЁ][а-яё]+)\.\s*([А-ЯЁ])\.\s*([А-ЯЁ])\.?")
+# lookbehind: «четная неделя» внутри «Нечетная неделя» не должна матчиться
+EVEN_RE = re.compile(r"(?i)(?<![А-ЯЁа-яё])четная\s+неделя")
+ODD_RE = re.compile(r"(?i)(?<![А-ЯЁа-яё])нечетная\s+неделя")
 SELF_RE = re.compile(r"\(\s*самостоятельная\s+работа\s*\)", re.I)
-NOISE = (
-    "Подгруппа 1",
-    "Подгруппа 2",
-    "(лекция)",
-    "Четная неделя:",
-    "Нечетная неделя:",
-    "Четная неделя",
-    "Нечетная неделя",
-)
+NOISE = ("Подгруппа 1", "Подгруппа 2", "(лекция)")
+MID_ROOM_RE = re.compile(r"^\d{2,3}[а-яё]?$")
+MAX_SUBJECT_LEN = 170
+MAX_SUBJECT_WORDS = 18
 
-# Слова вида "310" или "104а" посреди названия предмета — это номер аудитории,
-# прилепившийся из соседней колонки PDF. В настоящих названиях предметов
-# такого не бывает (шифры вида 01.01 с точкой под проверку не попадают).
-MID_ROOM_RE = re.compile(r"^\d{2,3}[а-я]?$")
-MAX_SUBJECT_LEN = 56
-MAX_SUBJECT_WORDS = 6
+TABLE_SETTINGS = {
+    "vertical_strategy": "lines",
+    "horizontal_strategy": "lines",
+    "snap_tolerance": 3,
+    "join_tolerance": 3,
+    "intersection_tolerance": 3,
+}
 
 
 def fetch_pdf(path):
-    req = urllib.request.Request(PDF_URL, headers={"User-Agent": "Mozilla/5.0 (schedule-bot)"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = resp.read()
-    if len(data) < 20000 or not data.startswith(b"%PDF"):
-        raise RuntimeError("не похоже на PDF, байт: %d" % len(data))
-    with open(path, "wb") as fh:
-        fh.write(data)
+    last = None
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(PDF_URL, headers={"User-Agent": "Mozilla/5.0 (schedule-bot)"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = resp.read()
+            if len(data) < 20000 or not data.startswith(b"%PDF"):
+                raise RuntimeError("не похоже на PDF, байт: %d" % len(data))
+            with open(path, "wb") as fh:
+                fh.write(data)
+            return
+        except Exception as exc:  # сеть моргнула — повторим
+            last = exc
+            time.sleep(5 * (attempt + 1))
+    raise RuntimeError("не удалось скачать PDF: %s" % last)
 
 
-def pdf_text(path):
-    txt = path + ".txt"
-    subprocess.run(["pdftotext", "-layout", "-enc", "UTF-8", path, txt], check=True)
-    with open(txt, encoding="utf-8") as fh:
-        return fh.read()
+# ---------- геометрия страницы ----------
 
+def center_x(w):
+    return (w["x0"] + w["x1"]) / 2.0
+
+
+def center_y(w):
+    return (w["top"] + w["bottom"]) / 2.0
+
+
+def merge_close(values, gap=2.0):
+    out = []
+    for v in sorted(values):
+        if not out or v - out[-1] > gap:
+            out.append(v)
+    return out
+
+
+def day_labels(words, right_edge):
+    """Вертикальные подписи дней: буквы идут снизу вверх, склеиваем и разворачиваем."""
+    letters = [
+        w for w in words
+        if center_x(w) < right_edge and re.match(r"^[а-яёА-ЯЁ]$", w["text"])
+    ]
+    letters.sort(key=lambda w: w["top"])
+    clusters = []
+    for w in letters:
+        if clusters and w["top"] - clusters[-1][-1]["bottom"] < 14:
+            clusters[-1].append(w)
+        else:
+            clusters.append([w])
+    labels = []
+    for cluster in clusters:
+        text = "".join(w["text"] for w in cluster)[::-1].lower()
+        if text in DAY_NAMES:
+            labels.append({"day": DAY_NAMES[text], "y": (cluster[0]["top"] + cluster[-1]["bottom"]) / 2.0})
+    return labels
+
+
+def cell_text(page, x0, y0, x1, y1):
+    """Текст ячейки: берём только символы, чей центр внутри ячейки (extract_text сам
+    склеивает разреженные буквы со стр. 7), чтобы хвосты ячеек-«переростков»
+    (типа «работа)») не протекали в соседнюю строку."""
+    filtered = page.filter(
+        lambda obj: obj["object_type"] != "char"
+        or (x0 <= (obj["x0"] + obj["x1"]) / 2 < x1 and y0 <= (obj["top"] + obj["bottom"]) / 2 < y1)
+    )
+    return filtered.extract_text() or ""
+
+
+def parse_pdf(path):
+    """Возвращает {code: {(day, bell): текст ячейки}} и порядок групп."""
+    import pdfplumber
+
+    cells = {}          # code -> {(day, bell): text}
+    group_cols = []     # [(code, x0, x1)] текущей секции
+    last_cell = {}      # code -> (day, bell) — для довесных строк без цифры
+    cur_day = 0
+    prev_bell = 99
+
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages:
+            tables = page.find_tables(TABLE_SETTINGS)
+            if not tables:
+                continue
+            table = max(tables, key=lambda t: (t.bbox[2] - t.bbox[0]) * (t.bbox[3] - t.bbox[1]))
+            words = page.extract_words()
+            if not words:
+                continue
+            tbl_left, tbl_top, tbl_right, tbl_bottom = table.bbox
+
+            # колонки — по вертикальным линиям сетки
+            vxs = merge_close(
+                (e["x0"] + e["x1"]) / 2.0
+                for e in page.edges
+                if e["orientation"] == "v"
+                and e["bottom"] > tbl_top + 2
+                and e["top"] < tbl_bottom - 2
+                and tbl_left - 2 <= (e["x0"] + e["x1"]) / 2.0 <= tbl_right + 2
+            )
+            if len(vxs) < 3:
+                continue
+            intervals = list(zip(vxs, vxs[1:]))
+
+            # колонка звонков: узкая слева, больше всего одиночных цифр 1-6
+            bell_idx, best_hits = None, 0
+            for i, (x0, x1) in enumerate(intervals):
+                if x1 > 62:
+                    continue
+                hits = sum(
+                    1 for w in words
+                    if BELL_RE.match(w["text"]) and x0 - 1 <= center_x(w) < x1 + 1
+                )
+                if hits > best_hits:
+                    bell_idx, best_hits = i, hits
+            if bell_idx is None or best_hits < 1:
+                continue
+            bell_x0, bell_x1 = intervals[bell_idx]
+            day_interval = intervals[bell_idx - 1] if bell_idx > 0 else None
+
+            # заголовок с шифрами групп начи��ает новую секцию
+            header_words = [w for w in words if GROUP_RE.match(w["text"])]
+            if header_words:
+                group_cols = []
+                for w in header_words:
+                    cx = center_x(w)
+                    col = next(
+                        (c for c in intervals if c[0] - 1 <= cx < c[1] + 1 and c[0] > bell_x1 - 1),
+                        None,
+                    )
+                    if col:
+                        group_cols.append((w["text"], col[0], col[1]))
+                if not group_cols:
+                    continue
+                group_cols.sort(key=lambda g: g[1])
+                cur_day = 0
+                prev_bell = 99
+                last_cell = {}
+                data_top = max(w["bottom"] for w in header_words) + 2
+            else:
+                if not group_cols:
+                    continue  # секция ещё не началась
+                data_top = tbl_top
+
+            # строки пар — горизонтальные линии через колонку звонков + края таблицы
+            bell_cx = (bell_x0 + bell_x1) / 2.0
+            row_lines = merge_close(
+                e["top"] for e in page.edges
+                if e["orientation"] == "h"
+                and e["x0"] - 1 <= bell_cx <= e["x1"] + 1
+                and tbl_top - 2 <= e["top"] <= tbl_bottom + 2
+            )
+            if not row_lines or row_lines[0] - tbl_top > 3:
+                row_lines.insert(0, tbl_top)
+            if tbl_bottom - row_lines[-1] > 3:
+                row_lines.append(tbl_bottom)
+
+            # блоки дней — горизонтальные линии через полосу дня
+            segments = []
+            if day_interval:
+                day_cx = (day_interval[0] + day_interval[1]) / 2.0
+                day_lines = merge_close(
+                    e["top"] for e in page.edges
+                    if e["orientation"] == "h"
+                    and e["x0"] - 1 <= day_cx <= e["x1"] + 1
+                    and data_top - 2 <= e["top"] <= tbl_bottom + 2
+                )
+                bounds = [data_top] + [y for y in day_lines if y > data_top + 3] + [tbl_bottom]
+                segments = [[bounds[i], bounds[i + 1], []] for i in range(len(bounds) - 1)]
+            else:
+                segments = [[data_top, tbl_bottom, []]]
+
+            for lab in day_labels(words, bell_x0 - 1):
+                for seg in segments:
+                    if seg[0] - 2 <= lab["y"] <= seg[1] + 2:
+                        seg[2].append(lab)
+                        break
+            # сегмент с несколькими подписями (линия между днями не дошла) — делим пополам по меткам
+            split_segments = []
+            for y0, y1, labs in segments:
+                if len(labs) <= 1:
+                    split_segments.append([y0, y1, labs[0]["day"] if labs else None])
+                    continue
+                labs.sort(key=lambda l: l["y"])
+                cuts = [y0] + [(labs[i]["y"] + labs[i + 1]["y"]) / 2.0 for i in range(len(labs) - 1)] + [y1]
+                for i, lab in enumerate(labs):
+                    split_segments.append([cuts[i], cuts[i + 1], lab["day"]])
+            segments = split_segments
+
+            def segment_at(y):
+                for idx, (y0, y1, day) in enumerate(segments):
+                    if y0 - 2 <= y < y1 + 2:
+                        return idx, day
+                return None, None
+
+            last_seg = None
+            for r0, r1 in zip(row_lines, row_lines[1:]):
+                if r1 <= data_top:
+                    continue  # строка заголовка
+                row_words = [w for w in words if r0 <= center_y(w) < r1]
+                if not row_words:
+                    continue
+                bell_word = next(
+                    (
+                        w for w in row_words
+                        if BELL_RE.match(w["text"]) and bell_x0 - 1 <= center_x(w) < bell_x1 + 1
+                    ),
+                    None,
+                )
+                seg_idx, seg_day = segment_at((r0 + r1) / 2.0)
+                if seg_idx is not None and seg_idx != last_seg:
+                    last_seg = seg_idx
+                    if seg_day is not None:
+                        cur_day = seg_day
+                        prev_bell = 0  # новый подписанный день — сброс
+                if bell_word is not None:
+                    bell = int(bell_word["text"])
+                    if bell <= prev_bell and seg_day is None:
+                        cur_day += 1  # новый день без подписи (блок уехал на другую страницу)
+                    prev_bell = bell
+                else:
+                    bell = None  # строка-довесок (ячейка разорвана переносом)
+                if not 1 <= cur_day <= 6:
+                    continue
+                for code, x0, x1 in group_cols:
+                    text = cell_text(page, x0, r0, x1, r1)
+                    if not text.strip():
+                        continue
+                    group_cells = cells.setdefault(code, {})
+                    if bell is None:
+                        key = last_cell.get(code)
+                        if key:
+                            group_cells[key] = (group_cells.get(key) or "") + " " + text
+                        continue
+                    key = (cur_day, bell)
+                    group_cells[key] = (group_cells.get(key) + " " + text) if key in group_cells else text
+                    last_cell[code] = key
+    return cells
+
+
+# ---------- чистка ячейки ----------
 
 def clean_cell(text):
-    """Из куска текста ячейки делает список занятий (обычно одно, два при чет/нечет)."""
-    body = " ".join(text.split())
+    """Из текста ячейки делает список занятий (одно, два при чет/нечет)."""
+    body = " ".join((text or "").split())
     if not body or set(body) <= set("- —–"):
         return []
     parts = []
-    if EVEN_RE.search(body) and ODD_RE.search(body):
-        odd_at = ODD_RE.search(body).start()
-        parts.append(("even", body[:odd_at]))
-        parts.append(("odd", body[odd_at:]))
-    elif EVEN_RE.search(body):
-        parts.append(("even", body))
-    elif ODD_RE.search(body):
-        parts.append(("odd", body))
+    em = EVEN_RE.search(body)
+    om = ODD_RE.search(body)
+    if em and om:
+        if em.start() < om.start():
+            parts = [("even", body[: om.start()]), ("odd", body[om.start():])]
+        else:
+            parts = [("odd", body[: em.start()]), ("even", body[em.start():])]
+    elif em:
+        parts = [("even", body)]
+    elif om:
+        parts = [("odd", body)]
     else:
-        parts.append((None, body))
+        parts = [(None, body)]
 
     out = []
     for parity, chunk in parts:
@@ -99,34 +343,45 @@ def clean_cell(text):
         if SELF_RE.search(piece):
             extra["self"] = True
             piece = SELF_RE.sub(" ", piece)
-        room = ""
-        m = ROOM_RE.search(piece)
-        if m:
-            room = m.group(1)
+        rooms = ROOM_RE.findall(piece)
+        room = rooms[0] if rooms else ""
         piece = ROOM_RE.sub(" ", piece)
         teacher = ""
-        t = TEACHER_RE.search(piece)
+        t = TEACHER_RE.search(piece) or TEACHER_COMPACT_RE.search(piece)
         if t:
             teacher = "%s %s.%s." % (t.group(1).lower(), t.group(2).lower(), t.group(3).lower())
-            piece = TEACHER_RE.sub(" ", piece)
+            piece = TEACHER_RE.sub(" ", piece)  # убираем всех (подгруппы), показываем первого
+            piece = TEACHER_COMPACT_RE.sub(" ", piece)
         elif "вакансия" in piece.lower():
             teacher = "вакансия"
+        if not room and teacher:
+            m2 = re.search(r"\s(\d{2,3}[а-яё]?)$", piece.rstrip())  # «Гусев Н.Н. 101»
+            if m2:
+                room = m2.group(1)
+                piece = piece.rstrip()[: m2.start()]
         for junk in NOISE:
             piece = piece.replace(junk, " ")
+        piece = re.sub(r"(?i)(?<![А-ЯЁа-яё])нечетная\s+неделя\s*:?", " ", piece)
+        piece = re.sub(r"(?i)(?<![А-ЯЁа-яё])четная\s+неделя\s*:?", " ", piece)
         piece = re.sub(r"\(\s*вакансия\s*\)|вакансия", " ", piece, flags=re.I)
         piece = re.sub(r"[-—–]{2,}", " ", piece)
         piece = re.sub(r"\s*,\s*$", " ", piece)
         subject = " ".join(piece.split()).strip(" ,.;-").lower()
         if len(subject) < 3:
             continue
-        if len(subject) > 120:
-            subject = subject[:120].rstrip() + "…"
+        # «МДК 01.01 Длинное название модуля…» → просто «мдк 01.01»,
+        # иначе в карточке пары полотно текста. Написания: «мдк 01.01», «мдк01.01», «мдк.02.05».
+        mcode = re.match(r"^мдк[\s.]*(\d{2}\.\d{2})", subject)
+        if mcode:
+            subject = "мдк " + mcode.group(1)
+        if len(subject) > MAX_SUBJECT_LEN:
+            subject = subject[:MAX_SUBJECT_LEN].rstrip() + "…"
         out.append((subject, teacher, room, extra))
     return out
 
 
 def slot_sane(item):
-    """Отбраковывает мусорные пары, получившиеся из склейки колонок PDF."""
+    """Отбраковка мусорных пар."""
     try:
         n, subject = item[0], item[1]
     except (TypeError, IndexError):
@@ -137,80 +392,52 @@ def slot_sane(item):
         return False
     if not 3 <= len(subject) <= MAX_SUBJECT_LEN:
         return False
-    words = subject.split()
-    if len(words) > MAX_SUBJECT_WORDS:
+    if len(subject.split()) > MAX_SUBJECT_WORDS:
         return False
-    for word in words[:-1]:
+    for word in subject.split()[:-1]:
         if MID_ROOM_RE.match(word):
             return False
     return True
 
 
-def parse_page(page):
-    """Одна страница -> {group_code: {day_id: [[n, subject, teacher, room, extra], ...]}}"""
-    lines = page.split("\n")
-    header_idx = None
-    columns = []
-    for idx, line in enumerate(lines):
-        found = list(GROUP_RE.finditer(line))
-        if len(found) >= 2:
-            header_idx = idx
-            columns = [(m.group(0), m.start()) for m in found]
-            break
-    if header_idx is None:
-        return {}
+def build_groups(cells):
+    """{code: {(day, bell): text}} -> отсортированный список групп для JSON."""
+    groups = []
+    for code in sorted(cells, key=lambda c: c.lower()):
+        by_day = {}
+        for (day, bell), text in cells[code].items():
+            if not 1 <= day <= 6 or not 1 <= bell <= 6:
+                continue
+            for subject, teacher, room, extra in clean_cell(text):
+                if teacher == "вакансия":
+                    continue  # пару без преподавателя (вакансию) не показываем
+                item = [bell, subject, teacher, room, extra]
+                if not slot_sane(item):
+                    continue
+                slots = by_day.setdefault(day, [])
+                if item not in slots:
+                    slots.append(item)
+        days = {}
+        for day in sorted(by_day):
+            items = sorted(by_day[day], key=lambda it: it[0])
+            if items:
+                days[str(day)] = items
+        if days:
+            groups.append({"id": code.lower(), "name": code, "days": days})
+    groups.sort(key=lambda g: g["name"].lower())
+    return groups
 
-    bounds = []
-    for i, (code, start) in enumerate(columns):
-        left = max(0, start - 4)
-        right = columns[i + 1][1] - 4 if i + 1 < len(columns) else 10 ** 6
-        bounds.append((code, left, right))
-    bell_edge = bounds[0][1]
 
-    result = {code: {} for code, _, _ in bounds}
-    day_id = 0
-    prev_bell = 99
-    current = None  # (bell, {code: [text]})
-
-    def flush():
-        if not current:
-            return
-        bell, buckets = current
-        for code, chunks in buckets.items():
-            for subject, teacher, room, extra in clean_cell(" ".join(chunks)):
-                result[code].setdefault(day_id, []).append([bell, subject, teacher, room, extra])
-
-    for line in lines[header_idx + 1:]:
-        head = line[:bell_edge]
-        bell_hit = BELL_RE.match(head.strip()) if head.strip() else None
-        if bell_hit:
-            flush()
-            bell = int(bell_hit.group(1))
-            if bell <= prev_bell:
-                day_id += 1
-            prev_bell = bell
-            if day_id > 6:
-                break
-            current = (bell, {code: [] for code, _, _ in bounds})
-        if current:
-            bell, buckets = current
-            for code, left, right in bounds:
-                buckets[code].append(line[left:right])
-    flush()
-    return result
-
+# ---------- сравнение со старым файлом, журнал ----------
 
 def day_count(days):
     return sum(len(items) for items in days.values())
 
 
-CHANGELOG_OUT = os.path.join(os.path.dirname(OUT), "changelog.json")
-CHANGELOG_LIMIT = 60
 DAY_SHORT = {1: "пн", 2: "вт", 3: "ср", 4: "чт", 5: "пт", 6: "сб"}
 
 
 def slot_key(item):
-    """Полная сигнатура пары для сравнения старого и нового разбора."""
     extra = item[4] if len(item) > 4 and isinstance(item[4], dict) else {}
     return (
         item[0],
@@ -238,7 +465,6 @@ def slot_label(item):
 
 
 def diff_schedules(old_map, new_map, at):
-    """Изменения по каждой группе: [{at, group, summary, details}]."""
     entries = []
     for gid in sorted(set(old_map) | set(new_map)):
         old_g = old_map.get(gid)
@@ -304,36 +530,28 @@ def load_old():
 
 
 def main():
-    tmp = tempfile.mkdtemp(prefix="sched-")
-    pdf = os.path.join(tmp, "schedule.pdf")
-    fetch_pdf(pdf)
-    text = pdf_text(pdf)
+    if len(sys.argv) > 1:
+        pdf = sys.argv[1]  # локальный файл для проверки
+    else:
+        pdf = os.path.join(tempfile.mkdtemp(prefix="sched-"), "schedule.pdf")
+        try:
+            fetch_pdf(pdf)
+        except Exception as exc:
+            # сети нет / PDF не отдают: не роняем workflow, попробуем в следующий час
+            print("пропуск: %s" % exc, file=sys.stderr)
+            return 0
 
-    merged = {}
-    for page in text.split("\f"):
-        for code, days in parse_page(page).items():
-            slot = merged.setdefault(code, {})
-            for day_id, items in days.items():
-                slot.setdefault(day_id, [])
-                for item in items:
-                    if item not in slot[day_id] and slot_sane(item):
-                        slot[day_id].append(item)
+    try:
+        cells = parse_pdf(pdf)
+    except Exception as exc:
+        print("пропуск: разбор упал: %s" % exc, file=sys.stderr)
+        return 0
 
-    parsed = {}
-    for code in sorted(merged, key=lambda c: c.lower()):
-        days = {}
-        for day_id in sorted(merged[code]):
-            if not 1 <= day_id <= 6:
-                continue
-            items = sorted(merged[code][day_id], key=lambda it: it[0])
-            if items:
-                days[str(day_id)] = items
-        if days:
-            parsed[code.lower()] = {"id": code.lower(), "name": code, "days": days}
-
+    parsed = {g["id"]: g for g in build_groups(cells)}
     if len(parsed) < 5:
-        print("разбор слишком бедный: групп %d" % len(parsed), file=sys.stderr)
-        return 1
+        # разбор подозрительно бедный — файл не трогаем, но и не падаем
+        print("разбор слишком бедный: групп %d — оставляем старый файл" % len(parsed), file=sys.stderr)
+        return 0
 
     old = load_old()
     if old:
@@ -361,18 +579,18 @@ def main():
         total = sum(day_count(g["days"]) for g in out_groups)
         if old_total and total < 0.6 * old_total:
             print(
-                "итог хуже старого файла: было %d пар, стало %d — отказ" % (old_total, total),
+                "итог хуже старого файла: было %d пар, стало %d — оставляем старый" % (old_total, total),
                 file=sys.stderr,
             )
-            return 1
+            return 0
         print("групп: %d, обновлено из PDF: %d, пар: %d" % (len(out_groups), replaced, total))
         groups = sorted(out_groups, key=lambda g: g["name"].lower())
     else:
         groups = sorted(parsed.values(), key=lambda g: g["name"].lower())
         total = sum(day_count(g["days"]) for g in groups)
         if total < 30:
-            print("разбор слишком бедный: занятий %d" % total, file=sys.stderr)
-            return 1
+            print("разбор слишком бедный: занятий %d — оставляем старый файл" % total, file=sys.stderr)
+            return 0
 
     old_groups_list = (old or {}).get("groups") or []
     changed = (not old) or (

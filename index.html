@@ -7,6 +7,39 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta name="theme-color" content="#F5F5F7" />
+    <script>
+      /* Тема применяется до первой отрисовки, чтобы лоадер не вспыхивал белым. */
+      (function () {
+        var mix = function (hex, base, ratio) {
+          var a = String(hex).replace("#", "");
+          var b = String(base).replace("#", "");
+          var p = function (i) {
+            var x = parseInt(a.slice(i, i + 2), 16);
+            var y = parseInt(b.slice(i, i + 2), 16);
+            return Math.round(x * ratio + y * (1 - ratio)).toString(16).padStart(2, "0");
+          };
+          return "#" + p(0) + p(2) + p(4);
+        };
+        try {
+          var raw = localStorage.getItem("weekly:groups:v2");
+          var data = raw ? JSON.parse(raw) : {};
+          var theme = data.theme === "light" ? "light" : "dark";
+          var root = document.documentElement;
+          root.dataset.theme = theme;
+          var accent =
+            typeof data.accent === "string" && /^#[0-9a-f]{6}$/i.test(data.accent) ? data.accent : "";
+          var tint = theme === "light" ? "#F5F5F7" : "#000000";
+          if (data.palette === "accent" && accent) {
+            root.dataset.weeklyPalette = "accent";
+            tint = mix(accent, theme === "light" ? "#ffffff" : "#05050a", theme === "light" ? 0.2 : 0.18);
+          }
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", tint);
+        } catch (e) {
+          /* приватный режим — остаются дефолты из CSS */
+        }
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="weeqo" />
@@ -67,7 +100,6 @@
                 <span class="weekly-academic-week" id="week-number">1</span>
                 <span id="week-parity">нечётная</span>
               </span>
-              <span class="weekly-data-stamp" id="data-stamp" aria-hidden="true" hidden></span>
             </button>
 
             <h1>
@@ -319,20 +351,6 @@
                       </svg>
                     </button>
 
-                    <button class="weekly-settings-row" id="go-refresh" type="button">
-                      <span class="weekly-settings-row-main">
-                        <span class="weekly-settings-icon is-freshman">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M23 4v6h-6" />
-                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                          </svg>
-                        </span>
-                        <span class="weekly-settings-copy">
-                          <strong>обновить данные</strong>
-                          <span>расписание и замены по запросу</span>
-                        </span>
-                      </span>
-                    </button>
 
                     <button class="weekly-settings-row" id="go-updates" type="button">
                       <span class="weekly-settings-row-main">
@@ -381,6 +399,8 @@
               </div>
             </div>
           </div>
+
+          <div class="weekly-data-stamp" id="data-stamp" hidden></div>
 
           <div class="date-strip" id="strip" data-selected-index="0">
             <button class="date-strip-week-arrow is-previous" id="prev-week" type="button" aria-label="предыдущая неделя">

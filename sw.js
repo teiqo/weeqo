@@ -1,4 +1,4 @@
-const CACHE = "weeqo-groups-v36";
+const CACHE = "weeqo-groups-v45";
 const ASSETS = [
   "./",
   "./index.html",
@@ -13,7 +13,8 @@ const ASSETS = [
   "./js/schedule.js",
   "./images/weeqo-icon.svg",
   "./images/weeqo-180.png",
-  "./manifest.webmanifest"
+  "./manifest.webmanifest",
+  "./assets/fonts/inter.ttf"
 ];
 
 self.addEventListener("install", (event) => {
