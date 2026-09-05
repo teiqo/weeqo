@@ -22,8 +22,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: build js/config.js from environment
-        # Читаем каждое значение из ОБОИХ хранилищ: сначала Variables,
-        # если там пусто — из Secrets. Так не важно, куда они были записаны.
+        # Приоритет: Variables → Secrets → значение, уже закоммиченное в js/config.js.
+        # Последнее важно: если секрет не создан, деплой больше НЕ обнуляет конфиг.
         env:
           SHARED_SWAPS_URL: ${{ vars.SHARED_SWAPS_URL || secrets.SHARED_SWAPS_URL }}
           TELEGRAM_BOT_NAME: ${{ vars.TELEGRAM_BOT_NAME || secrets.TELEGRAM_BOT_NAME }}
@@ -33,22 +33,39 @@ jobs:
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || vars.FIREBASE_API_KEY }}
           TELEGRAM_BOT_TOKEN_SHA256: ${{ secrets.TELEGRAM_BOT_TOKEN_SHA256 || vars.TELEGRAM_BOT_TOKEN_SHA256 }}
         run: |
-          for v in SHARED_SWAPS_URL FIREBASE_API_KEY TELEGRAM_BOT_NAME TELEGRAM_BOT_ID TELEGRAM_BOT_TOKEN_SHA256; do
-            if [ -z "$(eval "echo \$$v")" ]; then
-              echo "::warning::$v пуст — создай его в Settings → Secrets and variables → Actions (вкладка Variables или Secrets)"
+          # текущее значение переменной из уже лежащего в репе js/config.js
+          committed() {
+            [ -f js/config.js ] || return 0
+            sed -n "s/^var $1 = \"\(.*\)\";\$/\1/p" js/config.js | head -1
+          }
+          pick() {
+            eval "env_val=\$$1"
+            if [ -n "$env_val" ]; then printf '%s' "$env_val"; else committed "$1"; fi
+          }
+          V_SHARED_SWAPS_URL=$(pick SHARED_SWAPS_URL)
+          V_FIREBASE_API_KEY=$(pick FIREBASE_API_KEY)
+          V_TELEGRAM_BOT_NAME=$(pick TELEGRAM_BOT_NAME)
+          V_TELEGRAM_BOT_ID=$(pick TELEGRAM_BOT_ID)
+          V_TELEGRAM_OWNER_ID=$(pick TELEGRAM_OWNER_ID)
+          V_TELEGRAM_ADMIN_IDS=$(pick TELEGRAM_ADMIN_IDS)
+          V_TELEGRAM_BOT_TOKEN_SHA256=$(pick TELEGRAM_BOT_TOKEN_SHA256)
+          for v in SHARED_SWAPS_URL FIREBASE_API_KEY TELEGRAM_BOT_NAME TELEGRAM_BOT_ID; do
+            eval "val=\$V_$v"
+            if [ -z "$val" ]; then
+              echo "::warning::$v пуст — заполни его в js/local-config.js или в Settings → Secrets and variables → Actions"
             fi
           done
           printf '%s\n' \
             '/* ---------- конфиг weeqo: генерируется Action-ом из окружения github-pages ---------- */' \
-            "var SHARED_SWAPS_URL = \"${SHARED_SWAPS_URL}\";" \
-            "var FIREBASE_API_KEY = \"${FIREBASE_API_KEY}\";" \
-            "var TELEGRAM_BOT_NAME = \"${TELEGRAM_BOT_NAME}\";" \
-            "var TELEGRAM_BOT_ID = \"${TELEGRAM_BOT_ID}\";" \
-            "var TELEGRAM_OWNER_ID = \"${TELEGRAM_OWNER_ID}\";" \
-            "var TELEGRAM_ADMIN_IDS = \"${TELEGRAM_ADMIN_IDS}\";" \
-            "var TELEGRAM_BOT_TOKEN_SHA256 = \"${TELEGRAM_BOT_TOKEN_SHA256}\";" \
+            "var SHARED_SWAPS_URL = \"${V_SHARED_SWAPS_URL}\";" \
+            "var FIREBASE_API_KEY = \"${V_FIREBASE_API_KEY}\";" \
+            "var TELEGRAM_BOT_NAME = \"${V_TELEGRAM_BOT_NAME}\";" \
+            "var TELEGRAM_BOT_ID = \"${V_TELEGRAM_BOT_ID}\";" \
+            "var TELEGRAM_OWNER_ID = \"${V_TELEGRAM_OWNER_ID}\";" \
+            "var TELEGRAM_ADMIN_IDS = \"${V_TELEGRAM_ADMIN_IDS}\";" \
+            "var TELEGRAM_BOT_TOKEN_SHA256 = \"${V_TELEGRAM_BOT_TOKEN_SHA256}\";" \
             > js/config.js
-          grep -c '^var ' js/config.js
+          echo "config.js: строк $(grep -c '^var ' js/config.js), firebase key заполнен: $([ -n "$V_FIREBASE_API_KEY" ] && echo да || echo нет)"
 
       - name: stage site (без служебных файлов)
         run: |
