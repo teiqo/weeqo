@@ -2875,7 +2875,21 @@ a.weekly-settings-row.weekly-settings-link strong {
 .weekly-replace-sheet .weekly-tg-copy-id:active {
   opacity: 0.55;
 }
-
+.weekly-profile .weekly-tg-copy-id {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.weekly-profile .weekly-tg-copy-id b {
+  color: var(--weekly-text);
+  font-weight: 650;
+}
+.weekly-profile .weekly-tg-copy-id:active {
+  opacity: 0.55;
+}
 
 /* --- кнопка «выйти»: маленькая, справа сверху карточки профиля --- */
 .weekly-profile .weekly-profile-hero {
@@ -2907,7 +2921,6 @@ a.weekly-settings-row.weekly-settings-link strong {
   margin: 6px 0;
 }
 
-
 /* --- лоадер: фон и иконка следуют теме/акценту ещё до загрузки app.js --- */
 #loader.app-loading-state {
   background: var(--weekly-bg, #f5f5f7);
@@ -2926,73 +2939,30 @@ a.weekly-settings-row.weekly-settings-link strong {
     linear-gradient(150deg, var(--weekly-accent, #a55bff), var(--weekly-accent-readable, var(--weekly-accent, #2e9bff))) border-box;
 }
 
-/* --- лучи-шипы за лого в шапке + мягкое ядро (по референсу) --- */
-.weekly-title-row h1 {
-  position: relative;
-  isolation: isolate;
+/* --- полоска выбора дня: поднимается только верхушка пилюли, без overshoot --- */
+.date-strip.is-pressing .date-strip-selection:before {
+  transform-origin: center bottom;
+  transform: scaleY(1.045);
 }
-.weekly-title-row h1::before,
-.weekly-title-row h1::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  pointer-events: none;
+.date-strip.is-scrubbing .date-strip-selection:before,
+.date-strip.is-settling .date-strip-selection:before {
+  transform-origin: center bottom;
+  transform: scaleY(1.08);
 }
-/* Острые лучи веером из точки под лого */
-.weekly-title-row h1::before {
-  z-index: -2;
-  width: 330px;
-  height: 330px;
-  transform: translate(-50%, -60%);
-  background: conic-gradient(
-    from 326deg at 50% 80%,
-    transparent 0deg,
-    color-mix(in srgb, var(--weekly-accent, var(--weekly-blue)) 58%, transparent) 8deg,
-    transparent 15deg,
-    color-mix(in srgb, #b884ff 48%, transparent) 25deg,
-    transparent 33deg,
-    color-mix(in srgb, var(--weekly-accent, var(--weekly-blue)) 52%, transparent) 45deg,
-    transparent 53deg,
-    color-mix(in srgb, #59d98c 42%, transparent) 65deg,
-    transparent 73deg,
-    color-mix(in srgb, var(--weekly-accent, var(--weekly-blue)) 48%, transparent) 85deg,
-    transparent 92deg,
-    transparent 360deg
-  );
-  -webkit-mask-image: radial-gradient(circle at 50% 80%, #000 0%, #000 32%, transparent 68%);
-  mask-image: radial-gradient(circle at 50% 80%, #000 0%, #000 32%, transparent 68%);
-  filter: blur(6px) saturate(1.15);
-  opacity: 0.8;
-  animation: weekly-logo-rays-sway 14s ease-in-out infinite alternate;
+:root[data-weekly-palette=neutral] .date-strip.is-pressing .date-strip-selection:before {
+  transform: translateY(0) rotateX(0) scaleY(1.045);
 }
-/* Мягкое ядро-свечение вокруг самого лого */
-.weekly-title-row h1::after {
-  z-index: -1;
-  width: 190px;
-  height: 190px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--weekly-accent, var(--weekly-blue)) 38%, transparent) 0%, transparent 58%);
-  filter: blur(20px);
-  opacity: 0.75;
+:root[data-weekly-palette=neutral] .date-strip.is-scrubbing .date-strip-selection:before,
+:root[data-weekly-palette=neutral] .date-strip.is-settling .date-strip-selection:before {
+  transform: translateY(0) rotateX(0) scaleY(1.08);
 }
-:root[data-theme="light"] .weekly-title-row h1::before {
-  opacity: 0.45;
+
+/* --- заявки и редакторы: раскрытие внутри профиля --- */
+.weekly-profile-notifs-panel-inner #profile-tg-inline {
+  padding: 4px 2px 6px;
 }
-:root[data-theme="light"] .weekly-title-row h1::after {
-  opacity: 0.5;
-}
-@keyframes weekly-logo-rays-sway {
-  from {
-    transform: translate(-50%, -60%) rotate(-3.5deg);
-  }
-  to {
-    transform: translate(-50%, -60%) rotate(3.5deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .weekly-title-row h1::before {
-    animation: none;
-  }
+/* подсказка под полем id редактора — чуть ниже */
+.weekly-tg-add + .weekly-tg-add-hint {
+  display: block;
+  margin-top: 8px;
 }

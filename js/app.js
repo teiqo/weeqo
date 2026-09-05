@@ -1859,6 +1859,8 @@ function escapeHtml(text) {
 
 /* Список тумблеров уведомлений в профиле свёрнут по умолчанию. */
 var profileNotifsOpen = false;
+/* Блок «заявки и редакторы» раскрывается внутри профиля, как уведомления. */
+var profileTgOpen = false;
 
 function openProfile() {
   const backdrop = $("#profile-backdrop");
@@ -1888,7 +1890,21 @@ function openProfile() {
       </div>
     </div>`;
     accountBlock = canReview
-      ? `<div class="weekly-profile-group"><button type="button" class="weekly-profile-manage" data-act="tg-manage"><span>заявки и редакторы</span>${pendingCount ? '<b class="weekly-profile-count">' + pendingCount + "</b>" : ""}${ICON_CHEVRON}</button></div>`
+      ? `<div class="weekly-profile-group">
+        <button class="weekly-settings-row weekly-profile-notifs-head" type="button" data-act="tg-toggle" aria-expanded="${profileTgOpen ? "true" : "false"}">
+          <span class="weekly-settings-row-main">
+            <span class="weekly-settings-icon is-editor">${ICON_SHIELD}</span>
+            <span class="weekly-settings-copy">
+              <strong>заявки и редакторы</strong>
+              <span>${pendingCount ? "ждут проверки: " + pendingCount : "проверка замен и права"}</span>
+            </span>
+          </span>
+          ${ICON_CHEVRON}
+        </button>
+        <div class="weekly-profile-notifs-panel${profileTgOpen ? " is-open" : ""}">
+          <div class="weekly-profile-notifs-panel-inner"><div id="profile-tg-inline"></div></div>
+        </div>
+      </div>`
       : "";
   } else {
     accountBlock = `
@@ -1986,6 +2002,10 @@ function openProfile() {
   state.profileOpen = true;
   if (!tgSession && !TELEGRAM_BOT_ID && tgConfigured()) mountTelegramWidget(document.getElementById("profile-tg-widget"));
   if (!tgSession && TELEGRAM_BOT_ID) preloadTgLoginLib();
+  if (profileTgOpen) {
+    renderTgSheetBody();
+    if (canReview) pullPending();
+  }
 }
 
 function closeProfile() {
@@ -2107,6 +2127,28 @@ function bindExtra() {
       toggleNotifPref(sw.dataset.npref, sw);
       return;
     }
+    /* Действия заявок/редакторов внутри профиля — те же data-tg, что в шторке. */
+    const tgEl = e.target.closest("[data-tg]");
+    if (tgEl) {
+      const tgAct = tgEl.dataset.tg;
+      if (tgAct === "copy-id") copyTextToClipboard(tgEl.dataset.id || "");
+      else if (tgAct === "approve") approvePending(tgEl.dataset.key);
+      else if (tgAct === "reject") rejectPending(tgEl.dataset.key);
+      else if (tgAct === "grant") {
+        const entry = pendingMap[tgEl.dataset.key] || {};
+        grantEditor(tgEl.dataset.tgid, entry.byName);
+      } else if (tgAct === "revoke") revokeEditor(tgEl.dataset.tgid);
+      else if (tgAct === "add-editor") {
+        const inp = document.getElementById("tg-add-editor-id");
+        const id = inp ? inp.value.trim() : "";
+        if (!/^\d{3,32}$/.test(id)) {
+          toast("нужен числовой id — он есть в профиле у человека");
+          return;
+        }
+        grantEditor(id, "редактор " + id);
+      }
+      return;
+    }
     const act = e.target.closest("[data-act]");
     if (!act) return;
     if (act.dataset.act === "close") closeProfile();
@@ -2118,14 +2160,20 @@ function bindExtra() {
     } else if (act.dataset.act === "notifs-toggle") {
       profileNotifsOpen = !profileNotifsOpen;
       act.setAttribute("aria-expanded", profileNotifsOpen ? "true" : "false");
-      const panel = document.querySelector(".weekly-profile-notifs-panel");
+      const panel = act.parentElement.querySelector(".weekly-profile-notifs-panel");
       if (panel) panel.classList.toggle("is-open", profileNotifsOpen);
     } else if (act.dataset.act === "tg-logout") {
       tgLogout();
       openProfile();
-    } else if (act.dataset.act === "tg-manage") {
-      closeProfile();
-      openTgSheet();
+    } else if (act.dataset.act === "tg-toggle") {
+      profileTgOpen = !profileTgOpen;
+      act.setAttribute("aria-expanded", profileTgOpen ? "true" : "false");
+      const tgPanel = act.parentElement.querySelector(".weekly-profile-notifs-panel");
+      if (tgPanel) tgPanel.classList.toggle("is-open", profileTgOpen);
+      if (profileTgOpen) {
+        renderTgSheetBody();
+        pullPending();
+      }
     }
   });
 
@@ -2799,6 +2847,11 @@ async function sharedUrlWithAuth(url) {
   try {
     token = await ensureFbToken();
   } catch (e) {
+    if (!sharedUrlWithAuth._warned) {
+      /* Один раз за сессию: без токена база отвечает 401 на всё, что требует auth. */
+      sharedUrlWithAuth._warned = true;
+      console.warn("weeqo: не смог получить firebase-токен — запросы идут без auth. Проверь FIREBASE_API_KEY (посимвольно ли совпадает с Web API key в Firebase Console) и что включён Anonymous (Authentication → Sign-in method):", e);
+    }
     /* auth недоступен офлайн не настроен) — пробуем без токена */
   }
   if (!token) return url;
@@ -3649,28 +3702,15 @@ function pendingRowHtml(enc, entry, role) {
   );
 }
 
-function renderTgSheetBody() {
-  const body = document.getElementById("tg-sheet-body");
-  if (!body) return;
-  if (!tgSession) {
-    body.innerHTML =
-      '<div class="weekly-replace-head"><strong>вход через Telegram</strong><span>чтобы предлагать замены</span></div>' +
-      (TELEGRAM_BOT_ID
-        ? '<div class="weekly-tg-widget"><button type="button" class="weekly-profile-auth-btn" data-tg="oidc-login">' +
-          '<span class="weekly-profile-auth-icon">' + ICON_LOGIN + "</span>" +
-          '<span class="weekly-profile-auth-text"><strong>войти через Telegram</strong><small>общие замены и синхронизация профиля</small></span>' +
-          ICON_CHEVRON + "</button></div>"
-        : '<div class="weekly-tg-widget" id="tg-widget-mount"></div>') +
-      '<p class="weekly-replace-hint">кнопка работает на опубликованном сайте. после входа твои замены уходят редактору на проверку.</p>' +
-      '<div class="weekly-replace-actions"><button type="button" data-tg="close">закрыть</button></div>';
-    if (!TELEGRAM_BOT_ID) mountTelegramWidget(body.querySelector("#tg-widget-mount"));
-    else preloadTgLoginLib();
-    return;
-  }
+/* Контент окна Telegram; inline=true — панель внутри профиля (без шапки и нижних кнопок). */
+function tgSheetBodyHtml(inline) {
   const role = myRole();
-  const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "студент";
-  let html =
-    '<div class="weekly-replace-head"><strong>' + escapeHtml(tgDisplayName(tgSession)) + "</strong><span>" + roleLabel + "</span></div>";
+  let html = "";
+  if (!inline) {
+    const roleLabel = role === "owner" ? "владелец" : role === "editor" ? "редактор" : "студент";
+    html +=
+      '<div class="weekly-replace-head"><strong>' + escapeHtml(tgDisplayName(tgSession)) + "</strong><span>" + roleLabel + "</span></div>";
+  }
   if (role === "user")
     html +=
       '<p class="weekly-replace-hint"><button type="button" class="weekly-tg-copy-id" data-tg="copy-id" data-id="' +
@@ -3700,13 +3740,40 @@ function renderTgSheetBody() {
     html +=
       '<div class="weekly-tg-add"><input type="text" inputmode="numeric" id="tg-add-editor-id" placeholder="id редактора" autocomplete="off">' +
       '<button type="button" data-tg="add-editor">добавить</button></div>' +
-      '<p class="weekly-replace-hint">человек видит свой id у себя в профиле — строка «мой id», по тапу копируется. редактор проверяет заявки, а его замены уходят всем сразу.</p>';
+      '<p class="weekly-replace-hint weekly-tg-add-hint">человек видит свой id у себя в профиле — строка «мой id», по тапу копируется. редактор проверяет заявки, а его замены уходят всем сразу.</p>';
     html += "</div>";
   }
+  if (inline) return html;
   html +=
     '<div class="weekly-replace-actions"><button type="button" data-tg="logout">выйти</button>' +
     '<button type="button" data-tg="close">закрыть</button></div>';
-  body.innerHTML = html;
+  return html;
+}
+
+function renderTgSheetBody() {
+  const body = document.getElementById("tg-sheet-body");
+  const inline = document.getElementById("profile-tg-inline");
+  if (!body && !inline) return;
+  if (!tgSession) {
+    if (body) {
+      body.innerHTML =
+        '<div class="weekly-replace-head"><strong>вход через Telegram</strong><span>чтобы предлагать замены</span></div>' +
+        (TELEGRAM_BOT_ID
+          ? '<div class="weekly-tg-widget"><button type="button" class="weekly-profile-auth-btn" data-tg="oidc-login">' +
+            '<span class="weekly-profile-auth-icon">' + ICON_LOGIN + "</span>" +
+            '<span class="weekly-profile-auth-text"><strong>войти через Telegram</strong><small>общие замены и синхронизация профиля</small></span>' +
+            ICON_CHEVRON + "</button></div>"
+          : '<div class="weekly-tg-widget" id="tg-widget-mount"></div>') +
+        '<p class="weekly-replace-hint">кнопка работает на опубликованном сайте. после входа твои замены уходят редактору на проверку.</p>' +
+        '<div class="weekly-replace-actions"><button type="button" data-tg="close">закрыть</button></div>';
+      if (!TELEGRAM_BOT_ID) mountTelegramWidget(body.querySelector("#tg-widget-mount"));
+      else preloadTgLoginLib();
+    }
+    if (inline) inline.innerHTML = "";
+    return;
+  }
+  if (body) body.innerHTML = tgSheetBodyHtml(false);
+  if (inline) inline.innerHTML = tgSheetBodyHtml(true);
 }
 
 function openTgSheet() {
