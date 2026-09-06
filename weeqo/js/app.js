@@ -63,19 +63,10 @@ const ICON_CLOCK =
 
 const $ = (sel) => document.querySelector(sel);
 
-/* Тема по умолчанию — системная; сохранённая переопределяет её в load(). */
-const systemTheme = () =>
-  typeof window !== "undefined" &&
-  window.matchMedia &&
-  window.matchMedia("(prefers-color-scheme: light)").matches
-    ? "light"
-    : "dark";
-
 const state = {
   selected: defaultSelectedDate(),
   tab: "schedule",
-  theme: systemTheme(),
-  themeManual: false,
+  theme: "dark",
   palette: "default",
   accent: DEFAULT_ACCENT,
   windows: false,
@@ -174,11 +165,10 @@ function weekStart(d) {
   return addDays(x, -shift);
 }
 
-/* В субботу и воскресенье пар нет — по умолчанию показываем понедельник следующей недели. */
+/* В воскресенье пар нет — по умолчанию показываем понедельник следующей недели. */
 function defaultSelectedDate() {
   const today = startOfDay(new Date());
-  const dow = today.getDay();
-  return dow === 0 || dow === 6 ? addDays(weekStart(today), 7) : today;
+  return today.getDay() === 0 ? addDays(weekStart(today), 7) : today;
 }
 
 function sameDay(a, b) {
@@ -889,7 +879,7 @@ function renderTab() {
 function render(direction) {
   lastRenderAt = performance.now();
   // быстрые переключения больше не глушат анимацию: каждый день запускает каскад заново.
-  // при перемещении рулетки сцену уже меняет selectDate, здесь не дублируем
+  // при переме��ении рулетки сцену уже меняет selectDate, здесь не дублируем
   quietMotion = Boolean(scrub && scrub.active);
   renderHeader();
   renderStrip();
@@ -965,6 +955,7 @@ function applyTheme() {
     root.style.removeProperty("--weekly-accent-readable");
   }
 
+  $("#theme-toggle").setAttribute("aria-pressed", state.theme === "dark" ? "true" : "false");
   $("#dark-switch").setAttribute("aria-pressed", state.theme === "dark" ? "true" : "false");
   const darkRow = $("#dark-switch");
   if (darkRow) darkRow.disabled = false;
@@ -1009,7 +1000,6 @@ function save() {
       KEY,
       JSON.stringify({
         theme: state.theme,
-        themeManual: state.themeManual,
         palette: state.palette,
         accent: state.accent,
         windows: state.windows,
@@ -1031,9 +1021,6 @@ function load() {
     if (!raw) return;
     const data = JSON.parse(raw);
     if (data.theme === "dark" || data.theme === "light") state.theme = data.theme;
-    /* Старые сохранения без флага — тема уже была выбрана вручную, не трогаем. */
-    if (typeof data.themeManual === "boolean") state.themeManual = data.themeManual;
-    else if (data.theme === "dark" || data.theme === "light") state.themeManual = true;
     if (PALETTES.includes(data.palette)) state.palette = data.palette;
     if (typeof data.accent === "string" && /^#[0-9a-f]{6}$/i.test(data.accent)) {
       state.accent = data.accent;
@@ -1094,7 +1081,7 @@ function selectDate(d, direction, options) {
     if (state.tab === "schedule") {
       if (options.preview) {
         /* Во время вождения по рулетке сцена следует за пилюлей сразу,
-           но дёшево: без анимации смены и ��ез блока «следующих дней» —
+           но дёшево: без анимации смены и без блока «следующих дней» —
            их дорисует полный рендер при отпускании. */
         scrubPendingRender = false;
         quietMotion = true;
@@ -1295,7 +1282,7 @@ function activateScrub() {
   if (!scrub || !scrub.pointerDown || scrub.active) return;
   scrub.active = true;
   /* Захватываем указатель только после начала настоящего перетаскивания.
-     Поэтому обычный клик остаётся кликом по само�� кнопке дня. */
+     Поэтому обычный клик остаётся кликом по самой кнопке дня. */
   if (!scrub.strip.hasPointerCapture(scrub.pointerId)) {
     scrub.strip.setPointerCapture(scrub.pointerId);
   }
@@ -1614,9 +1601,15 @@ function bindEvents() {
     if (panel) panel.setAttribute("aria-hidden", completedOpen ? "false" : "true");
   });
 
+  $("#theme-toggle").addEventListener("click", () => {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    applyTheme();
+    renderHeader();
+    save();
+  });
+
   $("#dark-switch").addEventListener("click", () => {
     state.theme = state.theme === "dark" ? "light" : "dark";
-    state.themeManual = true; /* ручной выбор — больше не следуем системе */
     applyTheme();
     renderHeader();
     save();
@@ -1877,8 +1870,6 @@ const ICON_GIFT =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18M12 8v12M8.5 8a2.5 2.5 0 1 1 3.5-2.3A2.5 2.5 0 1 1 15.5 8z"/></svg>';
 const ICON_SHIELD =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 7.7-7 9.2-4-1.5-7-4.6-7-9.2V6z"/><path d="M9.3 11.8l2 2 3.4-3.9"/></svg>';
-const ICON_BELL =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>';
 const ICON_LOGIN =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>';
 
@@ -1896,27 +1887,6 @@ function escapeHtml(text) {
 var profileNotifsOpen = false;
 /* Блок «заявки и редакторы» раскрывается внутри профиля, как уведомления. */
 var profileTgOpen = false;
-
-/* Заголовок шторки: при раскрытом разделе показываем его название и иконку. */
-function profileHeaderTitleHtml() {
-  if (profileNotifsOpen)
-    return `<span class="weekly-profile-title-icon is-notifs">${ICON_BELL}</span>настроить уведомления`;
-  if (profileTgOpen)
-    return `<span class="weekly-profile-title-icon is-editors">${ICON_SHIELD}</span>заявки и редакторы`;
-  return "профиль";
-}
-
-/* Синхронизирует шапку шторки с раскрытым разделом без полного перерендера:
-   заголовок, класс is-expanded и поведение кнопки «назад» (к профилю, не закрытие). */
-function syncProfileHeader(sheet) {
-  if (!sheet) return;
-  const expanded = profileNotifsOpen || profileTgOpen;
-  sheet.classList.toggle("is-expanded", expanded);
-  const h1 = sheet.querySelector(".weekly-profile-header h1");
-  if (h1) h1.innerHTML = profileHeaderTitleHtml();
-  const backBtn = sheet.querySelector(".weekly-profile-header button");
-  if (backBtn) backBtn.dataset.act = expanded ? "profile-back" : "close";
-}
 
 function openProfile() {
   const backdrop = $("#profile-backdrop");
@@ -2023,7 +1993,7 @@ function openProfile() {
         <div class="weekly-profile-notifs-panel${profileNotifsOpen ? " is-open" : ""}">
           <div class="weekly-profile-notifs-panel-inner">
             ${npref("swaps", "замены и отмены", "в колокольчике и в telegram")}
-            ${npref("schedule", "обновления расписания", "когда парсер при��ылает новое")}
+            ${npref("schedule", "обновления расписания", "когда парсер присылает новое")}
             ${npref("pending", "заявки на проверку", "для владельца и редакторов")}
             ${npref("telegram", "дублировать в telegram", TELEGRAM_BOT_NAME ? "бот @" + TELEGRAM_BOT_NAME + " — сначала нажми у него /start" : "личные сообщения от бота")}
           </div>
@@ -2033,11 +2003,11 @@ function openProfile() {
 
   backdrop.innerHTML = `<div class="weekly-profile${profileNotifsOpen || profileTgOpen ? " is-expanded" : ""}">
     <div class="weekly-profile-header">
-      <button type="button" data-act="${profileNotifsOpen || profileTgOpen ? "profile-back" : "close"}">
+      <button type="button" data-act="close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
         назад
       </button>
-      <h1>${profileHeaderTitleHtml()}</h1>
+      <h1>профиль</h1>
       <span></span>
     </div>
     ${heroBlock}
@@ -2129,8 +2099,7 @@ function onboardingHtml() {
 
 function renderOnboarding() {
   const host = $("#onboarding");
-  /* Тему не форсируем: первый запуск следует системной (или выбранной ранее). */
-  applyTheme();
+  document.documentElement.dataset.theme = "dark";
   host.innerHTML = onboardingHtml();
   host.hidden = false;
 }
@@ -2219,21 +2188,8 @@ function bindExtra() {
       act.setAttribute("aria-expanded", profileNotifsOpen ? "true" : "false");
       const panel = act.parentElement.querySelector(".weekly-profile-notifs-panel");
       if (panel) panel.classList.toggle("is-open", profileNotifsOpen);
-      syncProfileHeader(act.closest(".weekly-profile"));
-    } else if (act.dataset.act === "profile-back") {
-      /* «назад» внутри раздела сворачивает разделы и возвращает к профилю. */
-      profileNotifsOpen = false;
-      profileTgOpen = false;
-      const sheetB = act.closest(".weekly-profile");
-      if (sheetB) {
-        sheetB
-          .querySelectorAll(".weekly-profile-notifs-head")
-          .forEach((head) => head.setAttribute("aria-expanded", "false"));
-        sheetB
-          .querySelectorAll(".weekly-profile-notifs-panel")
-          .forEach((panel) => panel.classList.remove("is-open"));
-        syncProfileHeader(sheetB);
-      }
+      const sheetN = act.closest(".weekly-profile");
+      if (sheetN) sheetN.classList.toggle("is-expanded", profileNotifsOpen || profileTgOpen);
     } else if (act.dataset.act === "tg-logout") {
       tgLogout();
       openProfile();
@@ -2242,7 +2198,8 @@ function bindExtra() {
       act.setAttribute("aria-expanded", profileTgOpen ? "true" : "false");
       const tgPanel = act.parentElement.querySelector(".weekly-profile-notifs-panel");
       if (tgPanel) tgPanel.classList.toggle("is-open", profileTgOpen);
-      syncProfileHeader(act.closest(".weekly-profile"));
+      const sheetT = act.closest(".weekly-profile");
+      if (sheetT) sheetT.classList.toggle("is-expanded", profileNotifsOpen || profileTgOpen);
       if (profileTgOpen) {
         renderTgSheetBody();
         pullPending();
@@ -2315,21 +2272,6 @@ function playBrandIntro() {
 
 function init() {
   load();
-  /* Пока тема не выбрана вручную — следим за системной и подхватываем её смену. */
-  (function followSystemTheme() {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mq = window.matchMedia("(prefers-color-scheme: light)");
-    const sync = () => {
-      if (state.themeManual) return;
-      const sys = mq.matches ? "light" : "dark";
-      if (state.theme === sys) return;
-      state.theme = sys;
-      applyTheme();
-      renderHeader();
-    };
-    if (mq.addEventListener) mq.addEventListener("change", sync);
-    else if (mq.addListener) mq.addListener(sync);
-  })();
   applyQuery();
   applyTheme();
 
@@ -2455,7 +2397,7 @@ function slotsFor(d) {
       next.cancelled = true;
       next.window = false;
       next.empty = false;
-      if (!next.subject) next.subject = "пара отме��ена";
+      if (!next.subject) next.subject = "пара отменена";
       return next;
     }
     if (sw.subject) {
@@ -2694,17 +2636,6 @@ var SCHEDULE_URL = "data/schedule.json";
 var SCHEDULE_CACHE_KEY = "weekly:schedule-cache:v2";
 var SCHEDULE_TTL = 3 * 60 * 60 * 1000;
 var scheduleFetchedAt = 0;
-var SCHEDULE_CHECKED_KEY = "weekly:schedule-checked-at:v1";
-/* Момент последней удачной проверки данных — его показывает штамп «обн.».
-   Храним в localStorage, чтобы после перезапуска было видно, когда данные проверялись. */
-var scheduleCheckedAt = (function () {
-  try {
-    const v = Number(localStorage.getItem(SCHEDULE_CHECKED_KEY));
-    return Number.isFinite(v) && v > 0 ? v : null;
-  } catch (e) {
-    return null;
-  }
-})();
 var scheduleApply = null;
 
 function previewAnimated() {
@@ -2776,17 +2707,9 @@ function refreshSchedule(force) {
   return fetch(SCHEDULE_URL + "?t=" + Date.now(), { cache: "no-store" })
     .then((res) => (res.ok ? res.json() : null))
     .then((payload) => {
-      if (!payload || !Array.isArray(payload.groups)) return false;
-      /* Ответ получен — двигаем штамп «обн.», даже если сами данные не изменились. */
-      scheduleCheckedAt = Date.now();
-      try {
-        localStorage.setItem(SCHEDULE_CHECKED_KEY, String(scheduleCheckedAt));
-      } catch (e) {
-        /* приватный режим */
-      }
-      renderDataStamp();
       /* Файл пришёл, но групп нет — парсер на GitHub ещё ни разу не записал данные. */
-      if (!payload.groups.length) return "empty";
+      if (payload && Array.isArray(payload.groups) && !payload.groups.length) return "empty";
+      if (!payload || !Array.isArray(payload.groups)) return false;
       scheduleFetchedAt = Date.now();
       try {
         localStorage.setItem(SCHEDULE_CACHE_KEY, JSON.stringify(payload));
@@ -3393,7 +3316,7 @@ async function tgRegister() {
       });
       if (!put.ok) {
         console.warn("tg-roles: регистрация отклонена базой:", put.status, "— опубликуй правила из firebase-rules.json в Firebase Console");
-        throw new Error("��егистрация отклонена: " + put.status);
+        throw new Error("регистрация отклонена: " + put.status);
       }
       tgRoles.boundTg = mine;
     } else {
@@ -3467,7 +3390,7 @@ function cloudRoot() {
 function encodeSwapKey(key) {
   /* Слеш в ключе (тм-303/б|...) для Firebase — разделитель пути: %2F в REST
      раскодируется обратно в "/", запись уходит глубже $key, и .validate правил
-     про��еряет родительскую мапу вместо записи — отсюда вечный 401. Заменяем
+     проверяет родительскую мапу вместо записи — отсюда вечный 401. Заменяем
      "/" на "~" (разрешён в ключах Firebase) и получаем плоский ключ. Точки
      по-прежнему экранируем — они в ключах Firebase запрещены. */
   return encodeURIComponent(String(key).replace(/\//g, "~")).replace(/\./g, "%2E");
@@ -3544,7 +3467,7 @@ async function diagnoseCloudWrite() {
     if (!me.data) {
       console.warn("weeqo-диагностика: правила опубликованы, но твоей регистрации нет (weeqo-users/" + fbAuth.uid + " пуст) — запись её не прошла. Ищи выше строку tg-roles с причиной и пришли скрин консоли.");
     } else if (owner.data == null) {
-      console.warn("weeqo-диа��ностика: ты зарегистрирован (" + me.data + "), но место владельца пустое — перезагрузи страницу, приложение займёт его само.");
+      console.warn("weeqo-диагностика: ты зарегистрирован (" + me.data + "), но место владельца пустое — перезагрузи страницу, приложение займёт его само.");
     } else if (String(owner.data) !== String(me.data)) {
       console.warn("weeqo-диагностика: владелец в базе = " + JSON.stringify(owner.data) + ", а твоя привязка = " + JSON.stringify(me.data) + ". Если это ошибка (например, узел создан руками) — удали weeqo-meta/owner в Firebase Console (Realtime Database → Данные) и перезагрузи страницу первым.");
     } else {
@@ -3910,7 +3833,7 @@ function tgSheetBodyHtml(inline) {
     html +=
       '<div class="weekly-tg-add"><input type="text" inputmode="numeric" id="tg-add-editor-id" placeholder="id редактора" autocomplete="off">' +
       '<button type="button" data-tg="add-editor">добавить</button></div>' +
-      '<p class="weekly-replace-hint weekly-tg-add-hint">человек видит свой id у себя в профиле — строка «мой id», по ��апу копируется. редактор проверяет заявки, а его замены уходят всем сразу.</p>';
+      '<p class="weekly-replace-hint weekly-tg-add-hint">человек видит свой id у себя в профиле — строка «мой id», по тапу копируется. редактор проверяет заявки, а его замены уходят всем сразу.</p>';
     html += "</div>";
   }
   if (inline) return html;
@@ -4131,11 +4054,11 @@ function saveNotifs() {
   }
 }
 
-function pushNotif(text, kind, tone) {
+function pushNotif(text, kind) {
   const prefs = loadNotifPrefs();
   if (kind && prefs[kind] === false) return;
   loadNotifs();
-  notifList.unshift({ text: text, at: Date.now(), read: false, tone: tone || null });
+  notifList.unshift({ text: text, at: Date.now(), read: false });
   if (notifList.length > 50) notifList.length = 50;
   saveNotifs();
   updateBellButton();
@@ -4194,11 +4117,7 @@ function notifyAboutRemoteSwaps(remote) {
     seen[key] = t;
     changed = true;
     if (!firstRun && key.indexOf(gprefix) === 0 && (!myId || String(entry.by || "") !== myId)) {
-      pushNotif(
-        describeSwapForNotif(key, entry),
-        "swaps",
-        entry.deleted ? "reset" : entry.cancelled ? "cancel" : "swap"
-      );
+      pushNotif(describeSwapForNotif(key, entry), "swaps");
     }
   }
   if (changed) {
@@ -4230,14 +4149,7 @@ function notifyAboutPending() {
   });
   if (!firstRun) {
     Object.keys(nowMap).forEach(function (enc) {
-      if (!(enc in seen)) {
-        var pEntry = pendingMap[enc] || {};
-        pushNotif(
-          "заявка · " + describeSwapForNotif(decodeSwapKey(enc), pEntry),
-          "pending",
-          pEntry.cancelled ? "cancel" : "pending"
-        );
-      }
+      if (!(enc in seen)) pushNotif("заявка · " + describeSwapForNotif(decodeSwapKey(enc), pendingMap[enc] || {}), "pending");
     });
   }
   try {
@@ -4250,33 +4162,10 @@ function notifyAboutScheduleStamp(updatedAt) {
   if (!updatedAt) return;
   try {
     var prev = localStorage.getItem(NOTIF_SEEN_SCHEDULE_KEY);
-    if (prev && prev !== updatedAt) pushNotif("обновились пары — базовое расписание обновлено", "schedule", "schedule");
+    if (prev && prev !== updatedAt) pushNotif("обновились пары — базовое расписание обновлено", "schedule");
     localStorage.setItem(NOTIF_SEEN_SCHEDULE_KEY, updatedAt);
   } catch (e) {}
 }
-
-/* Визуальный тип записи ленты: отмена — красным, замена — синим и т.д.
-   У старых записей без tone определяем тип по тексту. */
-function notifTone(n) {
-  if (n && n.tone) return n.tone;
-  var t = (n && n.text) || "";
-  if (t.indexOf("отмена пары") !== -1) return "cancel";
-  if (t.indexOf("заявка") === 0) return "pending";
-  if (t.indexOf("сброс замены") === 0) return "reset";
-  if (t.indexOf("замена") === 0) return "swap";
-  return "schedule";
-}
-
-var NOTIF_ICONS = {
-  cancel:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/></svg>',
-  swap:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 16V4M7 4 3.5 7.5M7 4l3.5 3.5M17 8v12m0 0 3.5-3.5M17 20l-3.5-3.5"/></svg>',
-  reset:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>',
-  pending: ICON_SHIELD,
-  schedule: ICON_BELL,
-};
 
 function closeBellSheet() {
   var backdrop = document.getElementById("bell-backdrop");
@@ -4296,12 +4185,8 @@ function renderBellBody() {
   } else {
     html += '<div class="weekly-tg-section">';
     notifList.forEach(function (n) {
-      var tone = notifTone(n);
       html +=
-        '<div class="weekly-tg-row weekly-notif-row is-' + tone + '">' +
-        '<span class="weekly-notif-ico" aria-hidden="true">' +
-        (NOTIF_ICONS[tone] || NOTIF_ICONS.schedule) +
-        '</span><div class="weekly-tg-row-text"><strong>' +
+        '<div class="weekly-tg-row"><div class="weekly-tg-row-text"><strong>' +
         escapeHtml(n.text) +
         "</strong><span>" +
         escapeHtml(fmtDateTime(n.at)) +
@@ -4370,8 +4255,7 @@ function renderDataStamp() {
     el.hidden = false;
     return;
   }
-  const stamp = scheduleCheckedAt || scheduleUpdatedAt;
-  const when = stamp ? fmtStamp(stamp) : "";
+  const when = scheduleUpdatedAt ? fmtStamp(scheduleUpdatedAt) : "";
   if (!when) {
     /* Данных ещё нет: показываем, что приложение их ищет (или «офлайн»). */
     el.textContent = offline ? "офлайн" : "ищем данные…";
