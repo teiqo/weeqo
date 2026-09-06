@@ -1,4 +1,4 @@
-const CACHE = "weeqo-groups-v66";
+const CACHE = "weeqo-groups-v67";
 const ASSETS = [
   "./",
   "./index.html",
@@ -65,24 +65,21 @@ self.addEventListener("message", (event) => {
   }
 });
 
-const isFresh = (url) =>
-  url.indexOf("data/schedule.json") !== -1 ||
-  url.indexOf("data/changelog.json") !== -1 ||
-  url.indexOf("js/config.js") !== -1 ||
-  url.indexOf("js/local-config.js") !== -1;
-
-/* HTML и код приложения — network-first: битая копия в кэше не должна залипать навсегда. */
-const isAppShell = (request) =>
-  request.mode === "navigate" ||
-  request.destination === "document" ||
-  request.destination === "script" ||
-  /\.(html|js|mjs)(\?|$)/.test(new URL(request.url).pathname);
+const stash = (request, response) => {
+  if (response && response.ok) {
+    const copy = response.clone();
+    caches.open(CACHE).then((cache) => cache.put(request, copy));
+  }
+  return response;
+};
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
 
   const url = request.url;
+  const parsed = new URL(url);
+  const sameOrigin = parsed.origin === location.origin;
 
   /* Облако с заменами, auth-токены и виджет Telegram не кешируем.
      Офлайн отдаём 503 сами, чтобы не сыпать Uncaught в консоль. */
@@ -93,52 +90,43 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (isFresh(url)) {
-    event.respondWith(fetch(request).catch(() => caches.match(request)));
-    return;
-  }
+  /* Чужие запросы — просто в сеть, без кэша. */
+  if (!sameOrigin) return;
 
-  if (isAppShell(request)) {
+  /* Хэшированные ассеты сборки (assets/*-ХЭШ.css) не меняются под тем же
+     именем — их безопасно отдавать из кэша мгновенно. */
+  if (parsed.pathname.indexOf("/assets/") !== -1) {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response && response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() =>
-          caches
-            .match(request)
-            .then((cached) =>
-              cached ||
-              (request.destination === "script"
-                ? new Response("", {
-                    status: 503,
-                    headers: { "Content-Type": "application/javascript" }
-                  })
-                : caches.match("./index.html"))
-            )
-        )
+      caches.match(request).then(
+        (cached) =>
+          cached ||
+          fetch(request)
+            .then((response) => stash(request, response))
+            .catch(() => caches.match("./index.html"))
+      )
     );
     return;
   }
 
-  /* Остальное (css с хэшем, шрифты, картинки) — cache-first. */
+  /* Всё остальное своё (index.html, js, patch.css, иконки, манифест, данные) —
+     network-first: после деплоя новые версии подхватываются сразу и никакой
+     файл не может залипнуть старым. Офлайн — последняя копия из кэша. */
   event.respondWith(
-    caches.match(request).then(
-      (cached) =>
-        cached ||
-        fetch(request)
-          .then((response) => {
-            if (response && response.ok) {
-              const copy = response.clone();
-              caches.open(CACHE).then((cache) => cache.put(request, copy));
-            }
-            return response;
-          })
-          .catch(() => caches.match("./index.html"))
-    )
+    fetch(request)
+      .then((response) => stash(request, response))
+      .catch(() =>
+        caches.match(request).then(
+          (cached) =>
+            cached ||
+            (request.mode === "navigate" || request.destination === "document"
+              ? caches.match("./index.html")
+              : request.destination === "script"
+                ? new Response("", {
+                    status: 503,
+                    headers: { "Content-Type": "application/javascript" }
+                  })
+                : Response.error())
+        )
+      )
   );
 });

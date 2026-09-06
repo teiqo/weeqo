@@ -3021,6 +3021,7 @@ a.weekly-settings-row.weekly-settings-link strong {
   background: linear-gradient(180deg, #59c8ff, #1689ec);
 }
 
+
 /* --- лента уведомлений: цветные иконки по типу события --- */
 .weekly-notif-row {
   flex-wrap: nowrap;
@@ -3046,3 +3047,10 @@ a.weekly-settings-row.weekly-settings-link strong {
 .weekly-notif-row.is-pending .weekly-notif-ico { background: linear-gradient(180deg, #ffcb55, #ff9500); }
 .weekly-notif-row.is-schedule .weekly-notif-ico { background: linear-gradient(180deg, #5ae87e, #28b957); }
 .weekly-notif-row.is-cancel .weekly-tg-row-text > strong { color: var(--weekly-danger); }
+
+
+/* --- раскрытый раздел профиля: строка-заголовок дублирует шапку ---
+       прячем её, чтобы список раздела начинался сразу сверху --- */
+.weekly-profile.is-expanded .weekly-profile-notifs-head {
+  display: none;
+}

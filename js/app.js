@@ -889,7 +889,7 @@ function renderTab() {
 function render(direction) {
   lastRenderAt = performance.now();
   // быстрые переключения больше не глушат анимацию: каждый день запускает каскад заново.
-  // при перемещении рулетки сцену уже меняет selectDate, здесь не дублируем
+  // при переме��е��ии рулетки сцену уже меняет selectDate, здесь не дублируем
   quietMotion = Boolean(scrub && scrub.active);
   renderHeader();
   renderStrip();
@@ -1094,7 +1094,7 @@ function selectDate(d, direction, options) {
     if (state.tab === "schedule") {
       if (options.preview) {
         /* Во время вождения по рулетке сцена следует за пилюлей сразу,
-           но дёшево: без анимации смены и ��ез блока «следующих дней» —
+           но дёшево: без анимации смены и без блока «следующих дней» —
            их дорисует полный рендер при отпускании. */
         scrubPendingRender = false;
         quietMotion = true;
@@ -1295,7 +1295,7 @@ function activateScrub() {
   if (!scrub || !scrub.pointerDown || scrub.active) return;
   scrub.active = true;
   /* Захватываем указатель только после начала настоящего перетаскивания.
-     Поэтому обычный клик остаётся кликом по само�� кнопке дня. */
+     Поэтому обычный клик остаётся кликом по са��ой кнопке дня. */
   if (!scrub.strip.hasPointerCapture(scrub.pointerId)) {
     scrub.strip.setPointerCapture(scrub.pointerId);
   }
@@ -1899,10 +1899,12 @@ var profileTgOpen = false;
 
 /* Заголовок шторки: при раскрытом разделе показываем его название и иконку. */
 function profileHeaderTitleHtml() {
+  /* Размер задан инлайн — иконка не расползётся, даже если CSS пришёл старый. */
+  const icon = (svg) => svg.replace("<svg ", '<svg width="15" height="15" ');
   if (profileNotifsOpen)
-    return `<span class="weekly-profile-title-icon is-notifs">${ICON_BELL}</span>настроить уведомления`;
+    return `<span class="weekly-profile-title-icon is-notifs">${icon(ICON_BELL)}</span>настроить уведомления`;
   if (profileTgOpen)
-    return `<span class="weekly-profile-title-icon is-editors">${ICON_SHIELD}</span>заявки и редакторы`;
+    return `<span class="weekly-profile-title-icon is-editors">${icon(ICON_SHIELD)}</span>заявки и редакторы`;
   return "профиль";
 }
 
@@ -2023,7 +2025,7 @@ function openProfile() {
         <div class="weekly-profile-notifs-panel${profileNotifsOpen ? " is-open" : ""}">
           <div class="weekly-profile-notifs-panel-inner">
             ${npref("swaps", "замены и отмены", "в колокольчике и в telegram")}
-            ${npref("schedule", "обновления расписания", "когда парсер при��ылает новое")}
+            ${npref("schedule", "обновления расписания", "когда парсер присылает новое")}
             ${npref("pending", "заявки на проверку", "для владельца и редакторов")}
             ${npref("telegram", "дублировать в telegram", TELEGRAM_BOT_NAME ? "бот @" + TELEGRAM_BOT_NAME + " — сначала нажми у него /start" : "личные сообщения от бота")}
           </div>
@@ -2359,7 +2361,8 @@ function init() {
   tickTimer = window.setInterval(tick, 1000);
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    /* updateViaCache: none — проверка новой версии SW не упирается в HTTP-кэш. */
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
   }
 }
 
@@ -2455,7 +2458,7 @@ function slotsFor(d) {
       next.cancelled = true;
       next.window = false;
       next.empty = false;
-      if (!next.subject) next.subject = "пара отме��ена";
+      if (!next.subject) next.subject = "пара отменена";
       return next;
     }
     if (sw.subject) {
@@ -2821,7 +2824,7 @@ function planScheduleRetry() {
   window.addEventListener("online", () => refreshSchedule(true));
 })();
 
-/* Слишком светлый акцент на светлом фоне и слишком тёмный на тёмном
+/* Слишком светлый ��кцент на светлом фоне и слишком тёмный на тёмном
    не читаются, поэтому для текста и иконок берём подправленный оттенок */
 function accentLuminance(hex) {
   const n = String(hex || "").replace("#", "");
@@ -2855,7 +2858,7 @@ var FIREBASE_API_KEY = window.FIREBASE_API_KEY || "";
 var TELEGRAM_BOT_NAME = window.TELEGRAM_BOT_NAME || "";
 var TELEGRAM_BOT_ID = String(window.TELEGRAM_BOT_ID || "").trim(); /* trim: пробел в переменной окружения ломал сверку aud */
 var TELEGRAM_BOT_TOKEN_SHA256 = window.TELEGRAM_BOT_TOKEN_SHA256 || "";
-/* Жёсткое назначение ролей через переменные окружения (без облака):
+/* Жё��ткое назначение ролей через переменные окружения (без облака):
    TELEGRAM_OWNER_ID — один telegram id владельца, TELEGRAM_ADMIN_IDS — id редакторов через запятую. */
 var TELEGRAM_OWNER_ID = String(window.TELEGRAM_OWNER_ID || "").trim();
 var TELEGRAM_ADMIN_IDS = String(window.TELEGRAM_ADMIN_IDS || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
@@ -3064,7 +3067,7 @@ async function verifyTgAuth(payload) {
 }
 
 /* ---------- вход через страницу oauth.telegram.org (как на csu) ----------
-   Библиотека telegram-login.js открывает официальную страницу входа Telegram
+   Библиотека telegram-login.js открывает офици��льную страницу входа Telegram
    в попапе (на телефоне — с переходом в приложение), сама делает PKCE-обмен
    и возвращает готовый id_token через postMessage. Бэкенд не нужен: подпись
    JWT проверяем на клиенте по публичным ключам Telegram (JWKS). */
@@ -3393,7 +3396,7 @@ async function tgRegister() {
       });
       if (!put.ok) {
         console.warn("tg-roles: регистрация отклонена базой:", put.status, "— опубликуй правила из firebase-rules.json в Firebase Console");
-        throw new Error("��егистрация отклонена: " + put.status);
+        throw new Error("регистрация отклонена: " + put.status);
       }
       tgRoles.boundTg = mine;
     } else {
@@ -3467,7 +3470,7 @@ function cloudRoot() {
 function encodeSwapKey(key) {
   /* Слеш в ключе (тм-303/б|...) для Firebase — разделитель пути: %2F в REST
      раскодируется обратно в "/", запись уходит глубже $key, и .validate правил
-     про��еряет родительскую мапу вместо записи — отсюда вечный 401. Заменяем
+     проверяет родительскую мапу вместо записи — отсюда вечный 401. Заменяем
      "/" на "~" (разрешён в ключах Firebase) и получаем плоский ключ. Точки
      по-прежнему экранируем — они в ключах Firebase запрещены. */
   return encodeURIComponent(String(key).replace(/\//g, "~")).replace(/\./g, "%2E");
@@ -3544,7 +3547,7 @@ async function diagnoseCloudWrite() {
     if (!me.data) {
       console.warn("weeqo-диагностика: правила опубликованы, но твоей регистрации нет (weeqo-users/" + fbAuth.uid + " пуст) — запись её не прошла. Ищи выше строку tg-roles с причиной и пришли скрин консоли.");
     } else if (owner.data == null) {
-      console.warn("weeqo-диа��ностика: ты зарегистрирован (" + me.data + "), но место владельца пустое — перезагрузи страницу, приложение займёт его само.");
+      console.warn("weeqo-диагностика: ты зарегистрирован (" + me.data + "), но место владельца пустое — перезагрузи страницу, приложение займёт его само.");
     } else if (String(owner.data) !== String(me.data)) {
       console.warn("weeqo-диагностика: владелец в базе = " + JSON.stringify(owner.data) + ", а твоя привязка = " + JSON.stringify(me.data) + ". Если это ошибка (например, узел создан руками) — удали weeqo-meta/owner в Firebase Console (Realtime Database → Данные) и перезагрузи страницу первым.");
     } else {
@@ -3910,7 +3913,7 @@ function tgSheetBodyHtml(inline) {
     html +=
       '<div class="weekly-tg-add"><input type="text" inputmode="numeric" id="tg-add-editor-id" placeholder="id редактора" autocomplete="off">' +
       '<button type="button" data-tg="add-editor">добавить</button></div>' +
-      '<p class="weekly-replace-hint weekly-tg-add-hint">человек видит свой id у себя в профиле — строка «мой id», по ��апу копируется. редактор проверяет заявки, а его замены уходят всем сразу.</p>';
+      '<p class="weekly-replace-hint weekly-tg-add-hint">человек видит свой id у себя в профиле — строка «мой id», по тапу копируется. редактор проверяет заявки, а его замены уходят всем сразу.</p>';
     html += "</div>";
   }
   if (inline) return html;
