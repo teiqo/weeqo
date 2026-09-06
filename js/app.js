@@ -2404,12 +2404,10 @@ function hideLoader() {
 function playBrandIntro() {
   const brand = $("#brand");
   if (!brand) return;
-  brand.classList.remove("is-playing", "is-word-out");
+  brand.classList.remove("is-playing");
   void brand.offsetWidth; /* перезапуск CSS-анимации */
   brand.classList.add("is-playing");
-  /* Слово показывается и уходит обратно, знак доворачивает свою анимацию. */
-  window.setTimeout(() => brand.classList.add("is-word-out"), 2400);
-  window.setTimeout(() => brand.classList.remove("is-playing", "is-word-out"), 4200);
+  window.setTimeout(() => brand.classList.remove("is-playing"), 4200);
 }
 
 function init() {
@@ -2448,8 +2446,12 @@ function init() {
   $("#app").hidden = false;
   hideLoader();
 
-  /* При первом входе экран закрыт онбордингом — интро сыграет в closeOnboarding(). */
-  if (state.onboarded) playBrandIntro();
+  /* Класс is-playing стоит прямо в HTML — интро играет с первого кадра сразу,
+     как в v42 (на айфоне так кейфреймы срабатывают надёжно); здесь только
+     снимаем его по завершении. При первом входе экран закрыт онбордингом —
+     интро переиграет closeOnboarding(). */
+  const brandEl = $("#brand");
+  window.setTimeout(() => brandEl && brandEl.classList.remove("is-playing"), 4200);
 
   if (state.settingsOpen) {
     state.settingsOpen = false;
@@ -4652,7 +4654,7 @@ function manualRefresh(btn) {
   btn.disabled = true;
   const icon = btn.querySelector(".weekly-settings-icon svg") || btn.querySelector("svg");
   if (icon) icon.classList.add("is-spinning");
-  /* Штамп у чётности на время обновления показывает «обновляем…». */
+  /* Штамп у чётности на время обновления показывает «обнов��яем…». */
   dataRefreshing = true;
   renderDataStamp();
   /* Замены тянем параллельно, у них своя защита от ошибок сети. */

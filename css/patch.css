@@ -3165,24 +3165,6 @@ a.weekly-settings-row.weekly-settings-link strong {
   }
 }
 
-/* --- логотип: слово показывается на интро и уходит обратно.
-       Переходы вместо кейфреймов — на iOS надёжнее (там кейфрейм слова не играл). --- */
-.weekly-header-word {
-  transition: opacity 0.3s ease, transform 0.45s cubic-bezier(0.22, 0.72, 0.16, 1),
-    clip-path 0.45s cubic-bezier(0.22, 0.72, 0.16, 1);
-}
-.weekly-header-brand.is-playing .weekly-header-word {
-  animation: none;
-  opacity: 1;
-  clip-path: inset(0 0 0 0);
-  transform: translate3d(0, -50%, 0);
-}
-.weekly-header-brand.is-word-out .weekly-header-word {
-  opacity: 0;
-  clip-path: inset(0 100% 0 0);
-  transform: translate3d(-8px, -50%, 0);
-}
-
 /* --- ленивый день-плейсхолдер (дорисовывается при прокрутке) --- */
 .weekly-lazy-day {
   min-height: 240px;
