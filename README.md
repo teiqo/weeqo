@@ -50,8 +50,8 @@ BotFather (мини-апп) → выбрать бота → login widget → в 
 
 ## деплой и обновления
 
-- Любой пуш пересобирает `js/config.js` и деплоит сайт на Pages.
-- `update-schedule` ходит за PDF каждые 3 часа (cron по UTC). запуск вручную: actions → update-schedule → Run workflow.
+- любой пуш пересобирает `js/config.js` и деплоит сайт на pages.
+- `update-schedule` ходит за PDF каждые 3 часа (cron по UTC). запуск вручную: actions → update-schedule → run workflow.
 - при изменениях фронта поднимай версию кэша в `sw.js` (`weeqo-groups-vXX`) — иначе клиенты останутся на старом коде из кэша.
 
 - очень сильно вдохновился - https://csu.noteven.dev/
