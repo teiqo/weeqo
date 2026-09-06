@@ -1,32 +1,32 @@
 # weeqo — расписание занятий
 
-PWA с расписанием колледжа: мне было скучно и я решил сделать приложение для просмотра расписания пар/расписания звонков/удобных замен с модерацией/систему уведомлений о изменений в парах/просмотра текущей пары и тдтд.
+<b>PWA с расписанием колледжа:</b> мне было скучно и я решил сделать приложение для просмотра расписания пар/расписания звонков/удобных замен с модерацией/систему уведомлений о изменений в парах/просмотра текущей пары и тдтд.
 у меня не было денег и поэтому этот репозиторий это и есть хостинг лол, облако — Firebase Realtime Database (для замен пар ну и там еще чето есть)
 
 ## структура
 
-| Путь | Что это |
+| путь | что это? |
 | --- | --- |
 | `index.html` | единственная страница приложения |
 | `js/app.js` | приложение |
 | `js/schedule.js` | работа с данными расписания |
-| `js/config.js` | генерируется Action-ом при деплое — руками не править и не коммитить значения |
+| `js/config.js` | генерируется <b>github actions</b> при деплое — руками не править и не коммитить значения (в env добавлять) |
 | `css/patch.css` | ручные правки поверх собранных стилей |
 | `assets/` | собранные стили и шрифт |
 | `images/` | иконки |
 | `data/schedule.json` | расписание — обновляет бот, руками не трогать |
 | `data/changelog.json` | журнал изменений расписания |
-| `tools/update_schedule.py` | парсер PDF с сайта колледжа (cron каждые 3 часа) |
-| `tools/notify_telegram.py` | рассылка уведомлений в Telegram |
+| `tools/update_schedule.py` | парсер PDF с сайта колледжа (cron каждые 3 часа) (это было сложно) |
+| `tools/notify_telegram.py` | рассылка уведомлений в <b>telegram</b> |
 | `tools/bot-hash.html` | локальный калькулятор sha256 токена бота |
 | `firebase-rules.json` | правила Realtime Database — публикуются руками в Firebase Console |
 | `.github/workflows/` | `deploy-pages.yml` — деплой сайта, `update-schedule.yml` — парсер по расписанию, `notify-telegram.yml` — уведомления |
 
-## Настройка (Settings → Secrets and variables → Actions)
+## настройка (settings → secrets and variables → actions)
 
-Workflow читает каждое значение из обеих вкладок — Variables и Secrets.
+workflow читает каждое значение из обеих вкладок — variables и secrets.
 
-| Имя | Что |
+| имя | что |
 | --- | --- |
 | `SHARED_SWAPS_URL` | URL Realtime Database + `/weeqo-swaps.json` |
 | `FIREBASE_API_KEY` | ключ веб-приложения Firebase |
@@ -36,18 +36,20 @@ Workflow читает каждое значение из обеих вкладо
 | `TELEGRAM_OWNER_ID` | telegram id владельца — необязательно |
 | `TELEGRAM_ADMIN_IDS` | telegram id редакторов через запятую — необязательно |
 
-## Firebase
+## firebase
 
 1. Создай Realtime Database и скопируй её URL в `SHARED_SWAPS_URL`.
 2. Опубликуй правила из `firebase-rules.json` (Realtime Database → Правила).
 3. Включи Anonymous в Authentication → Sign-in method.
 
-## Telegram
+## telegram
 
-BotFather (мини-апп) → выбрать бота → Login Widget → в Allowed URLs добавить `https://<твой>.github.io` → скопировать Client ID в `TELEGRAM_BOT_ID`.
+BotFather (мини-апп) → выбрать бота → login widget → в allowed URLs добавить `https://<твой>.github.io` → скопировать client ID в `TELEGRAM_BOT_ID`.
 
-## Деплой и обновления
+## деплой и обновления
 
 - Любой пуш пересобирает `js/config.js` и деплоит сайт на Pages.
-- `update-schedule` ходит за PDF каждые 3 часа (cron по UTC). Запуск вручную: Actions → update-schedule → Run workflow.
-- При изменениях фронта поднимай версию кэша в `sw.js` (`weeqo-groups-vXX`) — иначе клиенты останутся на старом коде из кэша.
+- `update-schedule` ходит за PDF каждые 3 часа (cron по UTC). запуск вручную: actions → update-schedule → Run workflow.
+- при изменениях фронта поднимай версию кэша в `sw.js` (`weeqo-groups-vXX`) — иначе клиенты останутся на старом коде из кэша.
+
+- очень сильно вдохновился - https://csu.noteven.dev/
