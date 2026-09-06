@@ -889,7 +889,7 @@ function renderTab() {
 function render(direction) {
   lastRenderAt = performance.now();
   // быстрые переключения больше не глушат анимацию: каждый день запускает каскад заново.
-  // при переме��е��ии рулетки сцену уже меняет selectDate, здесь не дублируем
+  // при перемещении рулетки сцену уже меняет selectDate, здесь не дублируем
   quietMotion = Boolean(scrub && scrub.active);
   renderHeader();
   renderStrip();
@@ -1295,7 +1295,7 @@ function activateScrub() {
   if (!scrub || !scrub.pointerDown || scrub.active) return;
   scrub.active = true;
   /* Захватываем указатель только после начала настоящего перетаскивания.
-     Поэтому обычный клик остаётся кликом по са����ой кнопке дня. */
+     Поэтому обычный клик остаётся кликом по самой кнопке дня. */
   if (!scrub.strip.hasPointerCapture(scrub.pointerId)) {
     scrub.strip.setPointerCapture(scrub.pointerId);
   }
@@ -1687,7 +1687,7 @@ function bindEvents() {
 
   /* Свайп по дням: палец тянет сцену за собой, а день меняется уже на
      отпускании ��� с обычной анимацией листания. Раньше день переключался
-     прямо посре��и жеста, и анимацию съедал активный скролл. */
+     прямо посреди жеста, и анимацию съедал активный скролл. */
   const scene = $("#scene");
   const swipeStage = $("#stage");
   let swipe = null;
@@ -1917,7 +1917,7 @@ function profileHeaderTitleHtml() {
 }
 
 /* Синхронизирует шапку шторки с раскрытым разделом без полного перерендера:
-   заголовок, класс is-expanded и поведение кнопки «назад» (к профилю, не закрытие). */
+   заголовок, is-expanded, поведение «назад» и скрытие строк-заголовков разделов. */
 function syncProfileHeader(sheet) {
   if (!sheet) return;
   const expanded = profileNotifsOpen || profileTgOpen;
@@ -1926,6 +1926,10 @@ function syncProfileHeader(sheet) {
   if (h1) h1.innerHTML = profileHeaderTitleHtml();
   const backBtn = sheet.querySelector(".weekly-profile-header button");
   if (backBtn) backBtn.dataset.act = expanded ? "profile-back" : "close";
+  /* Строки прячем инлайн — сработает даже со старым CSS из кэша. */
+  sheet.querySelectorAll(".weekly-profile-notifs-head").forEach((head) => {
+    head.style.display = expanded ? "none" : "";
+  });
 }
 
 function openProfile() {
@@ -2072,6 +2076,8 @@ function openProfile() {
     renderTgSheetBody();
     if (canReview) pullPending();
   }
+  /* На случай переоткрытия с раскрытым разделом — строки прячем и здесь. */
+  syncProfileHeader(backdrop.querySelector(".weekly-profile"));
 }
 
 function closeProfile() {
@@ -2470,7 +2476,7 @@ function slotsFor(d) {
       next.cancelled = true;
       next.window = false;
       next.empty = false;
-      if (!next.subject) next.subject = "пара отменен��";
+      if (!next.subject) next.subject = "пара отменена";
       return next;
     }
     if (sw.subject) {
@@ -2836,7 +2842,7 @@ function planScheduleRetry() {
   window.addEventListener("online", () => refreshSchedule(true));
 })();
 
-/* Слишком светлый ��кцент на светлом фоне и слишком тёмный на тёмном
+/* Слишком светлый акцент на светлом фоне и слишком тёмный на тёмном
    не читаются, поэтому для текста и иконок берём подправленный оттенок */
 function accentLuminance(hex) {
   const n = String(hex || "").replace("#", "");
@@ -2864,13 +2870,13 @@ function readableAccent(hex, theme) {
    Пустая строка = замены хранятся только на устройстве, как раньше.
    Проверить без правки кода можно параметром ?swaps-cloud=адрес. */
 /* Конфиг переехал в js/config.js — правь там, этот файл больше не трогай.
-   Читаем из window с запасными значениями на случай если config.js не за��рузился. */
+   Читаем из window с запасными значениями на случай если config.js не загрузился. */
 var SHARED_SWAPS_URL = window.SHARED_SWAPS_URL || "";
 var FIREBASE_API_KEY = window.FIREBASE_API_KEY || "";
 var TELEGRAM_BOT_NAME = window.TELEGRAM_BOT_NAME || "";
 var TELEGRAM_BOT_ID = String(window.TELEGRAM_BOT_ID || "").trim(); /* trim: пробел в переменной окружения ломал сверку aud */
 var TELEGRAM_BOT_TOKEN_SHA256 = window.TELEGRAM_BOT_TOKEN_SHA256 || "";
-/* Жё��ткое назначение ролей через переменные окружения (без облака):
+/* Жёсткое назначение ролей через переменные окружения (без облака):
    TELEGRAM_OWNER_ID — один telegram id владельца, TELEGRAM_ADMIN_IDS — id редакторов через запятую. */
 var TELEGRAM_OWNER_ID = String(window.TELEGRAM_OWNER_ID || "").trim();
 var TELEGRAM_ADMIN_IDS = String(window.TELEGRAM_ADMIN_IDS || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
@@ -3079,7 +3085,7 @@ async function verifyTgAuth(payload) {
 }
 
 /* ---------- вход через страницу oauth.telegram.org (как на csu) ----------
-   Библиотека telegram-login.js открывает офици��льную страницу входа Telegram
+   Библиотека telegram-login.js открывает официальную страницу входа Telegram
    в попапе (на телефоне — с переходом в приложение), сама делает PKCE-обмен
    и возвращает готовый id_token через postMessage. Бэкенд не нужен: подпись
    JWT проверяем на клиенте по публичным ключам Telegram (JWKS). */
@@ -3226,7 +3232,7 @@ function startOidcLogin() {
           if (!data.id_token) { console.warn("tg-login: в ответе нет id_token:", data); return; }
           verifyTgIdToken(data.id_token, nonce).then((payload) => {
             if (!payload || !(payload.id || payload.sub)) {
-              toast("вход не подтвердился — попроб��й ещё раз");
+              toast("вход не подтвердился — попробуй ещё раз");
               return;
             }
             applyTgSession(oidcSessionFromPayload(payload, data.id_token));
@@ -3363,7 +3369,7 @@ function swapPrimaryLabel() {
   const role = myRole();
   if (role === "owner" || role === "editor") return "опубликовать";
   if (role === "user") return "предложить";
-  return "сохранить у себя";
+  return "сохранить у ��ебя";
 }
 
 function swapAccessHint() {
@@ -3378,7 +3384,7 @@ function swapAccessHint() {
   return "";
 }
 
-/* Регистрация: привязываем анонимный uid устройства к Telegram id (оди�� раз),
+/* Регистрация: привязываем анонимный uid устройства к Telegram id (один раз),
    первый вошедший клеймит владельца. Права проверяются правилами базы. */
 async function tgRegister() {
   if (tgRegisterState === "done" || tgRegisterState === "pending") return;
@@ -3559,7 +3565,7 @@ async function diagnoseCloudWrite() {
     if (!me.data) {
       console.warn("weeqo-диагностика: правила опубликованы, но твоей регистрации нет (weeqo-users/" + fbAuth.uid + " пуст) — запись её не прошла. Ищи выше строку tg-roles с причиной и пришли скрин консоли.");
     } else if (owner.data == null) {
-      console.warn("weeqo-диагностик��: ты зарегистрирован (" + me.data + "), но место владельца пустое — перезагрузи страницу, приложение займёт его само.");
+      console.warn("weeqo-диагностика: ты зарегистрирован (" + me.data + "), но место владельца пустое — перезагрузи страницу, приложение займёт его само.");
     } else if (String(owner.data) !== String(me.data)) {
       console.warn("weeqo-диагностика: владелец в базе = " + JSON.stringify(owner.data) + ", а твоя привязка = " + JSON.stringify(me.data) + ". Если это ошибка (например, узел создан руками) — удали weeqo-meta/owner в Firebase Console (Realtime Database → Данные) и перезагрузи страницу первым.");
     } else {
@@ -4107,7 +4113,7 @@ function closeTgMemo() {
 
 /* Подписка на личные уведомления в Telegram: запись уходит в weeqo-tg-subs,
    а рассылает бот через GitHub Action (tools/notify_telegram.py). Перед
-   включением человек жмёт /start у бота — иначе TG не даёт написать перв��м. */
+   включением человек жмёт /start у бота — иначе TG не даёт написать первым. */
 async function syncTgSub() {
   if (!tgSession || !sharedSwapsEnabled()) return false;
   const prefs = loadNotifPrefs();
@@ -4146,11 +4152,11 @@ function saveNotifs() {
   }
 }
 
-function pushNotif(text, kind, tone) {
+function pushNotif(text, kind, tone, frag) {
   const prefs = loadNotifPrefs();
   if (kind && prefs[kind] === false) return;
   loadNotifs();
-  notifList.unshift({ text: text, at: Date.now(), read: false, tone: tone || null });
+  notifList.unshift({ text: text, at: Date.now(), read: false, tone: tone || null, frag: frag || null });
   if (notifList.length > 50) notifList.length = 50;
   saveNotifs();
   updateBellButton();
@@ -4212,7 +4218,8 @@ function notifyAboutRemoteSwaps(remote) {
       pushNotif(
         describeSwapForNotif(key, entry),
         "swaps",
-        entry.deleted ? "reset" : entry.cancelled ? "cancel" : "swap"
+        entry.deleted ? "reset" : entry.cancelled ? "cancel" : "swap",
+        buildNotifFrag(key, entry)
       );
     }
   }
@@ -4250,7 +4257,8 @@ function notifyAboutPending() {
         pushNotif(
           "заявка · " + describeSwapForNotif(decodeSwapKey(enc), pEntry),
           "pending",
-          pEntry.cancelled ? "cancel" : "pending"
+          pEntry.cancelled ? "cancel" : "pending",
+          buildNotifFrag(decodeSwapKey(enc), pEntry)
         );
       }
     });
@@ -4293,6 +4301,63 @@ var NOTIF_ICONS = {
   schedule: ICON_BELL,
 };
 
+/* Структурированный фрагмент дня для карточки уведомления.
+   У отмены/сброса в облаке нет полей пары — берём её из базового расписания. */
+function buildNotifFrag(key, entry) {
+  const m = key.match(/\|(\d{4}-\d{2}-\d{2}):(\d+)$/);
+  if (!m) return null;
+  const dIso = m[1];
+  const n = Number(m[2]);
+  let subject = entry.subject || "";
+  let teacher = entry.teacher || "";
+  let room = entry.room || "";
+  if (!subject && !teacher && !room) {
+    try {
+      const slot = slotsForBase(dateFromIso(dIso)).find((s) => s.n === n);
+      if (slot) {
+        subject = slot.subject || "";
+        teacher = slot.teacher || "";
+        room = slot.room || "";
+      }
+    } catch (e) {}
+  }
+  return {
+    d: dIso,
+    n: n,
+    subject: subject,
+    teacher: teacher,
+    room: room,
+    cancelled: !!entry.cancelled,
+    deleted: !!entry.deleted,
+  };
+}
+
+/* Мини-карточка дня в уведомлении: дата, время и сама пара —
+   отменённая зачёркнута. Вместо «полотна текста». */
+function notifFragHtml(n) {
+  const f = n && n.frag;
+  if (!f || !f.d || !f.n) return "";
+  const d = dateFromIso(f.d);
+  if (!d || Number.isNaN(d.getTime())) return "";
+  const bell = BELLS.find((b) => b.n === Number(f.n));
+  const time = bell ? (d.getDay() === 6 ? bell.sat : bell.week) : "";
+  const meta = [f.teacher, f.room].filter(Boolean).join(" · ");
+  return (
+    '<span class="weekly-notif-frag">' +
+    '<span class="weekly-notif-frag-day">' +
+    escapeHtml(dateLabel(d)) +
+    '</span><span class="weekly-notif-frag-lesson' +
+    (f.cancelled ? " is-cancelled" : "") +
+    '">' +
+    (time ? "<time>" + escapeHtml(time) + "</time>" : "") +
+    '<span class="weekly-notif-frag-main"><b>' +
+    escapeHtml(f.n + " пара" + (f.subject ? " · " + f.subject : "")) +
+    "</b>" +
+    (meta ? "<i>" + escapeHtml(meta) + "</i>" : "") +
+    "</span></span></span>"
+  );
+}
+
 function closeBellSheet() {
   var backdrop = document.getElementById("bell-backdrop");
   if (!backdrop) return;
@@ -4304,7 +4369,7 @@ function renderBellBody() {
   var body = document.getElementById("bell-sheet-body");
   if (!body) return;
   loadNotifs();
-  var html = '<div class="weekly-replace-head"><strong>увед��мления</strong><span>замены и обновления</span></div>';
+  var html = '<div class="weekly-replace-head"><strong>уведомления</strong><span>замены и обновления</span></div>';
   if (!notifList.length) {
     html +=
       '<p class="weekly-replace-hint weekly-updates-empty">пока тихо. как только кто-то опубликует замену, отменит пару или обновится расписание — здесь появится запись.</p>';
@@ -4318,7 +4383,9 @@ function renderBellBody() {
         (NOTIF_ICONS[tone] || NOTIF_ICONS.schedule) +
         '</span><div class="weekly-tg-row-text"><strong>' +
         escapeHtml(n.text) +
-        "</strong><span>" +
+        "</strong>" +
+        notifFragHtml(n) +
+        "<span>" +
         escapeHtml(fmtDateTime(n.at)) +
         "</span></div></div>";
     });
@@ -4502,6 +4569,19 @@ function manualRefresh(btn) {
 (function initUpdates() {
   const btn = document.getElementById("go-updates");
   if (btn) btn.addEventListener("click", openUpdatesSheet);
+  const bugBtn = document.getElementById("go-bug");
+  if (bugBtn)
+    bugBtn.addEventListener("click", () => {
+      /* Диагностика сразу в буфере — человеку остаётся вставить её в сообщение. */
+      const info = [
+        "weeqo v64 (sw v69)",
+        "группа: " + groupName(),
+        "тема: " + state.theme,
+        "UA: " + (navigator.userAgent || "?"),
+      ].join("\n");
+      copyTextToClipboard(info);
+      toast("диагностика скопирована — вставь её в сообщение");
+    });
   const headRefreshBtn = document.getElementById("refresh-btn");
   if (headRefreshBtn) headRefreshBtn.addEventListener("click", () => manualRefresh(headRefreshBtn));
   window.addEventListener("online", renderDataStamp);

@@ -19,6 +19,7 @@
 """
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -87,17 +88,19 @@ def fb_get(root, path, token):
 
 
 def tg_send(chat_id, text):
+    """Возвращает \"ok\" | \"forbidden\" | \"error\".
+    403 — человек не нажимал /start (бот не может написать первым)."""
     url = "https://api.telegram.org/bot%s/sendMessage" % BOT_TOKEN
     try:
         http_json(url, {"chat_id": chat_id, "text": text})
-        return True
+        return "ok"
     except urllib.error.HTTPError as e:
-        # 403 — человек не нажимал /start или заблокировал бота
         log("tg ->", chat_id, "HTTP", e.code)
-        return e.code != 403
+        return "forbidden" if e.code == 403 else "error"
     except Exception as e:
         log("tg ->", chat_id, e)
-        return True  # сетевые ошибки не считаем отпиской
+        return "error"
+
 
 
 def load_state():
@@ -147,7 +150,44 @@ def describe_swap(enc_key, entry):
     return line
 
 
+def read_owner_id():
+    """TELEGRAM_OWNER_ID из js/local-config.js / config.js (для тестовых сообщений)."""
+    for path in (os.path.join(ROOT, "js", "local-config.js"), CONFIG_JS):
+        try:
+            with open(path, encoding="utf-8") as f:
+                m = re.search(r'TELEGRAM_OWNER_ID\s*=\s*"(\d{3,})"', f.read())
+                if m:
+                    return m.group(1)
+        except Exception:
+            pass
+    return os.environ.get("TELEGRAM_OWNER_ID", "").strip()
+
+
+def send_test(chat_id):
+    if not chat_id:
+        log("тест: неизвестен chat_id владельца (ни local-config.js, ни TELEGRAM_OWNER_ID)")
+        return 1
+    ok = tg_send(chat_id, "\u2705 weeqo: тестовое уведомление — бот может писать тебе в ЛС.") == "ok"
+    log("тест ->", chat_id, "доставлено" if ok else "НЕ доставлено (нажми /start у бота)")
+    return 0 if ok else 1
+
+
 def main():
+    # Ручной запуск (Actions -> Run workflow) или `--test [chat_id]`:
+    # тестовое ЛС владельцу — проверка всего тракта за один клик.
+    # Если секрет не задан, запуск падает красным — это и есть диагностика.
+    test_to = None
+    if "--test" in sys.argv:
+        i = sys.argv.index("--test")
+        test_to = sys.argv[i + 1] if i + 1 < len(sys.argv) else read_owner_id()
+    elif os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
+        test_to = read_owner_id()
+    if test_to is not None:
+        if not BOT_TOKEN:
+            log("нет TELEGRAM_BOT_TOKEN — секрет не задан в Settings -> Secrets")
+            return 1
+        return send_test(test_to)
+
     if not BOT_TOKEN or not API_KEY:
         log("нет TELEGRAM_BOT_TOKEN или FIREBASE_API_KEY — пропуск (локальный запуск?)")
         return 0
@@ -201,27 +241,39 @@ def main():
         log("schedule.json:", e)
 
     # --- рассылка ---
-    dead = []
+    fails = state.get("fails") or {}
     sent = 0
     for tg_id, pref in subs.items():
         if not isinstance(pref, dict):
             continue
-        ok = True
+        status = "ok"
         if pref.get("swaps", True):
             for _, line in fresh:
-                ok = tg_send(tg_id, line) and ok
-                sent += 1
+                r = tg_send(tg_id, line)
+                if r == "ok":
+                    sent += 1
+                if r != "ok":
+                    status = r
         if schedule_line and pref.get("schedule", True):
-            ok = tg_send(tg_id, schedule_line) and ok
-            sent += 1
-        if not ok:
-            dead.append(tg_id)
+            r = tg_send(tg_id, schedule_line)
+            if r == "ok":
+                sent += 1
+            if r != "ok":
+                status = r
+        if status == "ok":
+            fails.pop(tg_id, None)
+        elif status == "forbidden":
+            fails[tg_id] = fails.get(tg_id, 0) + 1
 
-    # подписки с 403 (не нажали /start) убираем, чтобы не дёргать API зря
-    for tg_id in dead:
+    # 403 (человек ещё не нажимал /start) — терпим ~сутки (96 запусков по 15 мин):
+    # он может нажать /start позже и начнёт получать сообщения сам.
+    # (Запись в firebase отсюда не удаляется — это только защита от лишних вызовов.)
+    for tg_id in [t for t, c in fails.items() if c >= 96]:
         subs.pop(tg_id, None)
-        log("подписка снята (бот не может написать):", tg_id)
+        fails.pop(tg_id, None)
+        log("подписка пропускается (403 уже ~сутки):", tg_id)
 
+    state["fails"] = fails
     state["swaps"] = seen_swaps
     state["schedule"] = seen_schedule
     save_state(state)

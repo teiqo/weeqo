@@ -2991,7 +2991,6 @@ a.weekly-settings-row.weekly-settings-link strong {
   display: none;
 }
 
-
 /* --- заголовок шторки профиля с иконкой раскрытого раздела --- */
 .weekly-profile-header h1 {
   display: flex;
@@ -3021,7 +3020,6 @@ a.weekly-settings-row.weekly-settings-link strong {
   background: linear-gradient(180deg, #59c8ff, #1689ec);
 }
 
-
 /* --- лента уведомлений: цветные иконки по типу события --- */
 .weekly-notif-row {
   flex-wrap: nowrap;
@@ -3048,13 +3046,11 @@ a.weekly-settings-row.weekly-settings-link strong {
 .weekly-notif-row.is-schedule .weekly-notif-ico { background: linear-gradient(180deg, #5ae87e, #28b957); }
 .weekly-notif-row.is-cancel .weekly-tg-row-text > strong { color: var(--weekly-danger); }
 
-
 /* --- раскрытый раздел профиля: строка-заголовок дублирует шапку ---
        прячем её, чтобы список раздела начинался сразу сверху --- */
 .weekly-profile.is-expanded .weekly-profile-notifs-head {
   display: none;
 }
-
 
 /* --- логотип: после интро-анимации слово и сдвинутый знак остаются видимыми --- */
 .weekly-header-brand.is-done .weekly-header-mark {
@@ -3069,12 +3065,10 @@ a.weekly-settings-row.weekly-settings-link strong {
 /* --- iOS (WebKit): облегчаем тяжёлые blur-эффекты, чтобы не лагала прокрутка ---
        Десктоп не затронут: блок применяется только на iOS Safari/WebKit. --- */
 @supports (-webkit-touch-callout: none) {
-  /* липкая панель дат: меньше радиус — меньше перерисовок при скролле */
   .weekly-date-controls {
     backdrop-filter: blur(8px) saturate(140%);
     -webkit-backdrop-filter: blur(8px) saturate(140%);
   }
-  /* фиксированное подложное стекло под доком — самый дорогой элемент на скролле */
   .weekly-dock:before {
     backdrop-filter: blur(8px) saturate(1.05);
     -webkit-backdrop-filter: blur(8px) saturate(1.05);
@@ -3083,9 +3077,65 @@ a.weekly-settings-row.weekly-settings-link strong {
     backdrop-filter: blur(10px) saturate(120%);
     -webkit-backdrop-filter: blur(10px) saturate(120%);
   }
-  /* размытие сцены при вождении по рулетке дат на айфоне даёт рывки */
   .weekly-days-scene.is-date-scrubbing .weekly-active-day-stage,
   .weekly-days-scene.is-date-settling .weekly-active-day-stage {
     filter: none;
   }
+}
+
+/* --- иконка «сообщить об ошибке» --- */
+.weekly-settings-icon.is-bug {
+  background: linear-gradient(180deg, #ff9f8a, #e04a3a);
+}
+
+/* --- мини-карточка дня в уведомлении --- */
+.weekly-notif-frag {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  border: 1px solid var(--weekly-separator);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--weekly-surface) 70%, transparent);
+}
+.weekly-notif-frag-day {
+  display: block;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--weekly-separator);
+  background: color-mix(in srgb, var(--weekly-fill) 60%, transparent);
+  color: var(--weekly-secondary);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.weekly-notif-frag-lesson {
+  display: flex;
+  padding: 8px 10px;
+  align-items: center;
+  gap: 10px;
+}
+.weekly-notif-frag-lesson time {
+  flex: 0 0 auto;
+  color: var(--weekly-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.weekly-notif-frag-main {
+  min-width: 0;
+}
+.weekly-notif-frag-main b {
+  display: block;
+  font-size: 13px;
+  font-weight: 650;
+}
+.weekly-notif-frag-main i {
+  display: block;
+  color: var(--weekly-tertiary);
+  font-size: 11px;
+  font-style: normal;
+}
+.weekly-notif-row.is-cancel .weekly-notif-frag {
+  border-color: color-mix(in srgb, var(--weekly-danger) 30%, var(--weekly-separator));
+}
+.weekly-notif-row.is-cancel .weekly-notif-frag-lesson b {
+  color: var(--weekly-danger);
+  text-decoration: line-through;
 }
