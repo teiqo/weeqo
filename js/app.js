@@ -1227,8 +1227,20 @@ function scrubFrameStep(now) {
       scrub.target,
       dt,
       scrub.pointerDown ? 330 : 420,
-      scrub.pointerDown ? 23 : 47
+      /* При драге демпфирование критическое (2*sqrt(330)≈36.3): пилюля
+         следует за пальцем без колебаний вокруг него. */
+      scrub.pointerDown ? 37 : 47
     );
+    /* Анти-overshoot на доводке: палец отпущен — пружине запрещено перелетать
+       цель. При смене знака отклонения садимся ровно на цель и гасим скорость. */
+    if (!scrub.pointerDown) {
+      const prevDev = scrub.position - scrub.target;
+      const nextDev = next.position - scrub.target;
+      if (prevDev !== 0 && nextDev !== 0 && Math.sign(prevDev) !== Math.sign(nextDev)) {
+        next.position = scrub.target;
+        next.velocity = 0;
+      }
+    }
     scrub.position = Math.max(-8, Math.min(scrub.max + 8, next.position));
     scrub.velocity = next.velocity;
   }
@@ -1944,7 +1956,6 @@ function openProfile() {
         </div>`;
 
   const content = `
-      ${accountBlock}
       <div class="weekly-profile-group">
         <div class="weekly-profile-group-heading"><span>учебная группа</span></div>
         <div class="weekly-profile-select">
@@ -1973,7 +1984,8 @@ function openProfile() {
             ${npref("telegram", "дублировать в telegram", TELEGRAM_BOT_NAME ? "бот @" + TELEGRAM_BOT_NAME + " — сначала нажми у него /start" : "личные сообщения от бота")}
           </div>
         </div>
-      </div>`;
+      </div>
+      ${accountBlock}`;
 
   backdrop.innerHTML = `<div class="weekly-profile">
     <div class="weekly-profile-header">
@@ -3358,12 +3370,16 @@ function cloudRoot() {
 /* В ключах замен есть "/" (группы вида "тм-303/б") и могут быть точки —
    Firebase такое в ключах не принимает поэтому кодируем. */
 function encodeSwapKey(key) {
-  return encodeURIComponent(key).replace(/\./g, "%2E");
+  /* Слеш в ключе (тм-303/б|...) для Firebase — разделитель пути: %2F в REST
+     раскодируется обратно в "/", запись уходит глубже $key, и .validate правил
+     проверяет родительскую мапу вместо записи — отсюда вечный 401. Заменяем
+     "/" на "~" (разрешён в ключах Firebase) и получаем плоский ключ. Точки
+     по-прежнему экранируем — они в ключах Firebase запрещены. */
+  return encodeURIComponent(String(key).replace(/\//g, "~")).replace(/\./g, "%2E");
 }
-
 function decodeSwapKey(enc) {
   try {
-    return decodeURIComponent(enc);
+    return decodeURIComponent(enc).replace(/~/g, "/");
   } catch (e) {
     return enc;
   }

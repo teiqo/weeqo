@@ -2966,3 +2966,17 @@ a.weekly-settings-row.weekly-settings-link strong {
   display: block;
   margin-top: 8px;
 }
+
+
+/* --- профиль: больше высоты на пк и телефоне --- */
+.weekly-profile {
+  max-height: min(940px, calc(100dvh - 20px));
+}
+@media (max-width: 640px) {
+  .weekly-profile-backdrop {
+    padding: 8px;
+  }
+  .weekly-profile {
+    max-height: calc(100dvh - 16px);
+  }
+}
