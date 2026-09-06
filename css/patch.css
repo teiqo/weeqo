@@ -3054,3 +3054,38 @@ a.weekly-settings-row.weekly-settings-link strong {
 .weekly-profile.is-expanded .weekly-profile-notifs-head {
   display: none;
 }
+
+
+/* --- логотип: после интро-анимации слово и сдвинутый знак остаются видимыми --- */
+.weekly-header-brand.is-done .weekly-header-mark {
+  transform: translate3d(calc(-50% + var(--weekly-brand-shift)), 0, 0);
+}
+.weekly-header-brand.is-done .weekly-header-word {
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+  transform: translate3d(0, -50%, 0);
+}
+
+/* --- iOS (WebKit): облегчаем тяжёлые blur-эффекты, чтобы не лагала прокрутка ---
+       Десктоп не затронут: блок применяется только на iOS Safari/WebKit. --- */
+@supports (-webkit-touch-callout: none) {
+  /* липкая панель дат: меньше радиус — меньше перерисовок при скролле */
+  .weekly-date-controls {
+    backdrop-filter: blur(8px) saturate(140%);
+    -webkit-backdrop-filter: blur(8px) saturate(140%);
+  }
+  /* фиксированное подложное стекло под доком — самый дорогой элемент на скролле */
+  .weekly-dock:before {
+    backdrop-filter: blur(8px) saturate(1.05);
+    -webkit-backdrop-filter: blur(8px) saturate(1.05);
+  }
+  .live-card-glass {
+    backdrop-filter: blur(10px) saturate(120%);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+  }
+  /* размытие сцены при вождении по рулетке дат на айфоне даёт рывки */
+  .weekly-days-scene.is-date-scrubbing .weekly-active-day-stage,
+  .weekly-days-scene.is-date-settling .weekly-active-day-stage {
+    filter: none;
+  }
+}

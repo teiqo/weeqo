@@ -1295,7 +1295,7 @@ function activateScrub() {
   if (!scrub || !scrub.pointerDown || scrub.active) return;
   scrub.active = true;
   /* Захватываем указатель только после начала настоящего перетаскивания.
-     Поэтому обычный клик остаётся кликом по са��ой кнопке дня. */
+     Поэтому обычный клик остаётся кликом по са����ой кнопке дня. */
   if (!scrub.strip.hasPointerCapture(scrub.pointerId)) {
     scrub.strip.setPointerCapture(scrub.pointerId);
   }
@@ -1687,7 +1687,7 @@ function bindEvents() {
 
   /* Свайп по дням: палец тянет сцену за собой, а день меняется уже на
      отпускании ��� с обычной анимацией листания. Раньше день переключался
-     прямо посреди жеста, и анимацию съедал активный скролл. */
+     прямо посре��и жеста, и анимацию съедал активный скролл. */
   const scene = $("#scene");
   const swipeStage = $("#stage");
   let swipe = null;
@@ -1779,10 +1779,18 @@ function bindEvents() {
   scene.addEventListener("touchend", () => endSwipe(true), { passive: true });
   scene.addEventListener("touchcancel", () => endSwipe(false), { passive: true });
 
-  const vh = () =>
+  /* На iOS Safari innerHeight меняется при скролле (прячется/показывается тулбар) —
+     если пересчитывать высоту на каждый resize, вся раскладка «подпрыгивает».
+     Пересчитываем только при реальной смене ширины (поворот, сплит-вью). */
+  let lastViewportWidth = window.innerWidth;
+  const vh = (force) => {
+    if (!force && window.innerWidth === lastViewportWidth) return;
+    lastViewportWidth = window.innerWidth;
     document.documentElement.style.setProperty("--weekly-viewport-height", `${window.innerHeight}px`);
-  window.addEventListener("resize", vh);
-  vh();
+  };
+  window.addEventListener("resize", () => vh(false));
+  window.addEventListener("orientationchange", () => vh(true));
+  vh(true);
 }
 
 /* ---------- старт ---------- */
@@ -2309,10 +2317,14 @@ function hideLoader() {
 function playBrandIntro() {
   const brand = $("#brand");
   if (!brand) return;
-  brand.classList.remove("is-playing");
+  brand.classList.remove("is-playing", "is-done");
   void brand.offsetWidth; /* перезапуск CSS-анимации */
   brand.classList.add("is-playing");
-  window.setTimeout(() => brand.classList.remove("is-playing"), 4200);
+  window.setTimeout(() => {
+    brand.classList.remove("is-playing");
+    /* Слово и сдвинутый знак остаются видимыми после интро. */
+    brand.classList.add("is-done");
+  }, 4200);
 }
 
 function init() {
@@ -2458,7 +2470,7 @@ function slotsFor(d) {
       next.cancelled = true;
       next.window = false;
       next.empty = false;
-      if (!next.subject) next.subject = "пара отменена";
+      if (!next.subject) next.subject = "пара отменен��";
       return next;
     }
     if (sw.subject) {
@@ -2852,7 +2864,7 @@ function readableAccent(hex, theme) {
    Пустая строка = замены хранятся только на устройстве, как раньше.
    Проверить без правки кода можно параметром ?swaps-cloud=адрес. */
 /* Конфиг переехал в js/config.js — правь там, этот файл больше не трогай.
-   Читаем из window с запасными значениями на случай если config.js не загрузился. */
+   Читаем из window с запасными значениями на случай если config.js не за��рузился. */
 var SHARED_SWAPS_URL = window.SHARED_SWAPS_URL || "";
 var FIREBASE_API_KEY = window.FIREBASE_API_KEY || "";
 var TELEGRAM_BOT_NAME = window.TELEGRAM_BOT_NAME || "";
@@ -3214,7 +3226,7 @@ function startOidcLogin() {
           if (!data.id_token) { console.warn("tg-login: в ответе нет id_token:", data); return; }
           verifyTgIdToken(data.id_token, nonce).then((payload) => {
             if (!payload || !(payload.id || payload.sub)) {
-              toast("вход не подтвердился — попробуй ещё раз");
+              toast("вход не подтвердился — попроб��й ещё раз");
               return;
             }
             applyTgSession(oidcSessionFromPayload(payload, data.id_token));
@@ -3366,7 +3378,7 @@ function swapAccessHint() {
   return "";
 }
 
-/* Регистрация: привязываем анонимный uid устройства к Telegram id (один раз),
+/* Регистрация: привязываем анонимный uid устройства к Telegram id (оди�� раз),
    первый вошедший клеймит владельца. Права проверяются правилами базы. */
 async function tgRegister() {
   if (tgRegisterState === "done" || tgRegisterState === "pending") return;
@@ -3547,7 +3559,7 @@ async function diagnoseCloudWrite() {
     if (!me.data) {
       console.warn("weeqo-диагностика: правила опубликованы, но твоей регистрации нет (weeqo-users/" + fbAuth.uid + " пуст) — запись её не прошла. Ищи выше строку tg-roles с причиной и пришли скрин консоли.");
     } else if (owner.data == null) {
-      console.warn("weeqo-диагностика: ты зарегистрирован (" + me.data + "), но место владельца пустое — перезагрузи страницу, приложение займёт его само.");
+      console.warn("weeqo-диагностик��: ты зарегистрирован (" + me.data + "), но место владельца пустое — перезагрузи страницу, приложение займёт его само.");
     } else if (String(owner.data) !== String(me.data)) {
       console.warn("weeqo-диагностика: владелец в базе = " + JSON.stringify(owner.data) + ", а твоя привязка = " + JSON.stringify(me.data) + ". Если это ошибка (например, узел создан руками) — удали weeqo-meta/owner в Firebase Console (Realtime Database → Данные) и перезагрузи страницу первым.");
     } else {
@@ -4095,7 +4107,7 @@ function closeTgMemo() {
 
 /* Подписка на личные уведомления в Telegram: запись уходит в weeqo-tg-subs,
    а рассылает бот через GitHub Action (tools/notify_telegram.py). Перед
-   включением человек жмёт /start у бота — иначе TG не даёт написать первым. */
+   включением человек жмёт /start у бота — иначе TG не даёт написать перв��м. */
 async function syncTgSub() {
   if (!tgSession || !sharedSwapsEnabled()) return false;
   const prefs = loadNotifPrefs();
@@ -4292,7 +4304,7 @@ function renderBellBody() {
   var body = document.getElementById("bell-sheet-body");
   if (!body) return;
   loadNotifs();
-  var html = '<div class="weekly-replace-head"><strong>уведомления</strong><span>замены и обновления</span></div>';
+  var html = '<div class="weekly-replace-head"><strong>увед��мления</strong><span>замены и обновления</span></div>';
   if (!notifList.length) {
     html +=
       '<p class="weekly-replace-hint weekly-updates-empty">пока тихо. как только кто-то опубликует замену, отменит пару или обновится расписание — здесь появится запись.</p>';
