@@ -64,7 +64,7 @@ const ICON_CLOCK =
 const $ = (sel) => document.querySelector(sel);
 
 const state = {
-  selected: startOfDay(new Date()),
+  selected: defaultSelectedDate(),
   tab: "schedule",
   theme: "dark",
   palette: "default",
@@ -163,6 +163,12 @@ function weekStart(d) {
   const x = startOfDay(d);
   const shift = (x.getDay() + 6) % 7;
   return addDays(x, -shift);
+}
+
+/* В воскресенье пар нет — по умолчанию показываем понедельник следующей недели. */
+function defaultSelectedDate() {
+  const today = startOfDay(new Date());
+  return today.getDay() === 0 ? addDays(weekStart(today), 7) : today;
 }
 
 function sameDay(a, b) {
@@ -680,6 +686,7 @@ function setScene(html, direction) {
     const first = document.createElement("div");
     first.className = "weekly-active-day-scene";
     first.id = "day-scene";
+    first._weeqoHtml = html;
     first.innerHTML = html;
     stage.appendChild(first);
     return;
@@ -695,7 +702,12 @@ function setScene(html, direction) {
     old.classList.remove("is-leaving", "is-entering");
     old.removeAttribute("data-direction");
     old.style.cssText = "";
-    old.innerHTML = html;
+    /* При открытии одинаковый контент применяется дважды (кэш, затем сеть) —
+       без этого стража анимация появления пар играла два раза подряд. */
+    if (old._weeqoHtml !== html) {
+      old._weeqoHtml = html;
+      old.innerHTML = html;
+    }
     return;
   }
 
@@ -713,6 +725,7 @@ function setScene(html, direction) {
   next.id = "day-scene";
   next.dataset.direction = direction;
   next.style.animation = "none";
+  next._weeqoHtml = html;
   next.innerHTML = html;
   stage.appendChild(next);
 
@@ -1241,7 +1254,8 @@ function scrubFrameStep(now) {
         next.velocity = 0;
       }
     }
-    scrub.position = Math.max(-8, Math.min(scrub.max + 8, next.position));
+    /* Без люфта за краями: пилюля не вылетает за пределы полоски. */
+    scrub.position = Math.max(0, Math.min(scrub.max, next.position));
     scrub.velocity = next.velocity;
   }
   scrub.pointerVelocity = (scrub.pointerVelocity || 0) * Math.exp(-dt * 10);
@@ -1571,7 +1585,7 @@ function bindEvents() {
   arrow($("#prev-week"), -7);
   arrow($("#next-week"), 7);
 
-  $("#today-btn").addEventListener("click", () => selectDate(new Date()));
+  $("#today-btn").addEventListener("click", () => selectDate(defaultSelectedDate()));
 
   /* завершённые пары: раскрытие с плавной анимацией высоты и проявления */
   $("#scene").addEventListener("click", (e) => {
@@ -1987,7 +2001,7 @@ function openProfile() {
       </div>
       ${accountBlock}`;
 
-  backdrop.innerHTML = `<div class="weekly-profile">
+  backdrop.innerHTML = `<div class="weekly-profile${profileNotifsOpen || profileTgOpen ? " is-expanded" : ""}">`
     <div class="weekly-profile-header">
       <button type="button" data-act="close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
@@ -2174,6 +2188,8 @@ function bindExtra() {
       act.setAttribute("aria-expanded", profileNotifsOpen ? "true" : "false");
       const panel = act.parentElement.querySelector(".weekly-profile-notifs-panel");
       if (panel) panel.classList.toggle("is-open", profileNotifsOpen);
+      const sheetN = act.closest(".weekly-profile");
+      if (sheetN) sheetN.classList.toggle("is-expanded", profileNotifsOpen || profileTgOpen);
     } else if (act.dataset.act === "tg-logout") {
       tgLogout();
       openProfile();
@@ -2182,6 +2198,8 @@ function bindExtra() {
       act.setAttribute("aria-expanded", profileTgOpen ? "true" : "false");
       const tgPanel = act.parentElement.querySelector(".weekly-profile-notifs-panel");
       if (tgPanel) tgPanel.classList.toggle("is-open", profileTgOpen);
+      const sheetT = act.closest(".weekly-profile");
+      if (sheetT) sheetT.classList.toggle("is-expanded", profileNotifsOpen || profileTgOpen);
       if (profileTgOpen) {
         renderTgSheetBody();
         pullPending();

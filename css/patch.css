@@ -2980,3 +2980,13 @@ a.weekly-settings-row.weekly-settings-link strong {
     max-height: calc(100dvh - 16px);
   }
 }
+
+
+/* --- раскрытый блок (уведомления/заявки) занимает всю панель профиля --- */
+.weekly-profile.is-expanded .weekly-profile-hero,
+.weekly-profile.is-expanded .weekly-profile-identity {
+  display: none;
+}
+.weekly-profile.is-expanded .weekly-profile-content > .weekly-profile-group:not(:has([aria-expanded="true"])) {
+  display: none;
+}
