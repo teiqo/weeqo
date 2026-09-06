@@ -76,6 +76,75 @@
     <!-- страховка: заполняет только те значения, которые Actions оставил пустыми -->
     <script src="js/local-config.js"></script>
     <script type="module" src="js/app.js"></script>
+    <script>
+      /* Страховка от «бесконечной загрузки»: если модуль не поднялся (битый файл
+         в кэше service worker, обрыв сети), один раз чистим кэш и перезагружаемся. */
+      (function () {
+        var FLAG = "weeqo:self-heal";
+        var healed = false;
+
+        function booted() {
+          var app = document.getElementById("app");
+          return !document.getElementById("loader") || (app && !app.hidden);
+        }
+
+        function reload() {
+          var url = location.pathname + "?fresh=" + Date.now() + location.hash;
+          location.replace(url);
+        }
+
+        function heal(reason) {
+          if (healed || booted()) return;
+          healed = true;
+          try {
+            if (sessionStorage.getItem(FLAG)) return; /* уже пробовали — не циклим */
+            sessionStorage.setItem(FLAG, reason || "1");
+          } catch (e) {
+            return;
+          }
+          var done = false;
+          var finish = function () {
+            if (done) return;
+            done = true;
+            reload();
+          };
+          window.setTimeout(finish, 2500);
+          var jobs = [];
+          if (window.caches && caches.keys) {
+            jobs.push(
+              caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+              })
+            );
+          }
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            jobs.push(
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(regs.map(function (r) { return r.unregister(); }));
+              })
+            );
+          }
+          Promise.all(jobs).then(finish, finish);
+        }
+
+        window.addEventListener("error", function (event) {
+          var src = event && event.filename ? String(event.filename) : "";
+          if (event && (event.error instanceof SyntaxError || src.indexOf("app.js") !== -1 || src.indexOf("schedule.js") !== -1)) {
+            heal("error");
+          }
+        });
+
+        window.setTimeout(function () { heal("timeout"); }, 8000);
+
+        window.addEventListener("load", function () {
+          window.setTimeout(function () {
+            if (booted()) {
+              try { sessionStorage.removeItem(FLAG); } catch (e) {}
+            }
+          }, 1500);
+        });
+      })();
+    </script>
       <style>[hidden] { display: none !important; }</style>
   </head>
   <body>

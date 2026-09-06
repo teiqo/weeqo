@@ -1,4 +1,4 @@
-const CACHE = "weeqo-groups-v62";
+const CACHE = "weeqo-groups-v63";
 const ASSETS = [
   "./",
   "./index.html",
@@ -19,7 +19,19 @@ const ASSETS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE)
+      /* Обходим HTTP-кэш браузера, чтобы в кэш SW не попала устаревшая копия. */
+      .then((cache) =>
+        Promise.all(
+          ASSETS.map((url) =>
+            fetch(new Request(url, { cache: "reload" }))
+              .then((res) => (res.ok ? cache.put(url, res) : null))
+              .catch(() => null)
+          )
+        )
+      )
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -34,34 +46,96 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
-  /* schedule.json, changelog.json и config.js — network-first: свежее важнее кэша. */
-  if (
-    event.request.url.indexOf("data/schedule.json") !== -1 ||
-    event.request.url.indexOf("data/changelog.json") !== -1 ||
-    event.request.url.indexOf("js/config.js",
-  "js/local-config.js") !== -1
-  ) {
-    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+/* Страница может попросить сбросить кэш и сам SW, если приложение не загрузилось. */
+self.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type === "skip-waiting") {
+    self.skipWaiting();
     return;
   }
+  if (data.type === "purge") {
+    event.waitUntil(
+      caches
+        .keys()
+        .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+        .then(() => {
+          if (event.source) event.source.postMessage({ type: "purged" });
+        })
+    );
+  }
+});
+
+const isFresh = (url) =>
+  url.indexOf("data/schedule.json") !== -1 ||
+  url.indexOf("data/changelog.json") !== -1 ||
+  url.indexOf("js/config.js") !== -1 ||
+  url.indexOf("js/local-config.js") !== -1;
+
+/* HTML и код приложения — network-first: битая копия в кэше не должна залипать навсегда. */
+const isAppShell = (request) =>
+  request.mode === "navigate" ||
+  request.destination === "document" ||
+  request.destination === "script" ||
+  /\.(html|js|mjs)(\?|$)/.test(new URL(request.url).pathname);
+
+self.addEventListener("fetch", (event) => {
+  const request = event.request;
+  if (request.method !== "GET") return;
+
+  const url = request.url;
+
   /* Облако с заменами, auth-токены и виджет Telegram не кешируем.
      Офлайн отдаём 503 сами, чтобы не сыпать Uncaught в консоль. */
-  if (/\.(firebaseio\.com|firebasedatabase\.app|googleapis\.com|getpantry\.cloud)|telegram\.org/.test(event.request.url)) {
+  if (/\.(firebaseio\.com|firebasedatabase\.app|googleapis\.com|getpantry\.cloud)|telegram\.org/.test(url)) {
     event.respondWith(
-      fetch(event.request).catch(() => new Response(null, { status: 503 }))
+      fetch(request).catch(() => new Response(null, { status: 503 }))
     );
     return;
   }
+
+  if (isFresh(url)) {
+    event.respondWith(fetch(request).catch(() => caches.match(request)));
+    return;
+  }
+
+  if (isAppShell(request)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches
+            .match(request)
+            .then((cached) =>
+              cached ||
+              (request.destination === "script"
+                ? new Response("", {
+                    status: 503,
+                    headers: { "Content-Type": "application/javascript" }
+                  })
+                : caches.match("./index.html"))
+            )
+        )
+    );
+    return;
+  }
+
+  /* Остальное (css с хэшем, шрифты, картинки) — cache-first. */
   event.respondWith(
-    caches.match(event.request).then(
+    caches.match(request).then(
       (cached) =>
         cached ||
-        fetch(event.request)
+        fetch(request)
           .then((response) => {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+            if (response && response.ok) {
+              const copy = response.clone();
+              caches.open(CACHE).then((cache) => cache.put(request, copy));
+            }
             return response;
           })
           .catch(() => caches.match("./index.html"))
