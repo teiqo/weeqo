@@ -3318,11 +3318,19 @@ async function tgRegister() {
   }
 }
 
+/* Промис, который резолвится, когда синк ролей завершился (любым исходом).
+   Публикации ждут его: правила требуют, чтобы регистрация уже лежала в базе. */
+var tgRolesReadyResolve;
+var tgRolesReady = new Promise(function (resolve) { tgRolesReadyResolve = resolve; });
+function waitTgRoles() {
+  return Promise.race([tgRolesReady, new Promise(function (r) { setTimeout(r, 8000); })]);
+}
+
 async function tgSyncRoles() {
   /* Роли живут в облаке (SHARED_SWAPS_URL), а не в конфиге виджета. Раньше тут
      стоял tgConfigured(), и при OIDC-входе синк молча пропускался —
      владелец не назначался никому. */
-  if (!tgSession || !sharedSwapsEnabled()) return;
+  if (!tgSession || !sharedSwapsEnabled()) { tgRolesReadyResolve(); return; }
   try {
     await tgRegister();
     const root = cloudRoot();
@@ -3337,6 +3345,8 @@ async function tgSyncRoles() {
     updateTgButton();
   } catch (e) {
     console.warn("tg-roles: синк ролей не удался (офлайн или база отклонила):", e);
+  } finally {
+    tgRolesReadyResolve();
   }
 }
 
@@ -3384,6 +3394,7 @@ async function cloudWrite(path, body) {
         (resp.status === 401 || resp.status === 403
           ? " — опубликуй правила из firebase-rules.json (Realtime Database → Правила) и включи Anonymous в Authentication → Sign-in method"
           : ""));
+      if (resp.status === 401 || resp.status === 403) diagnoseCloudWrite();
     } else {
       lastCloudStatus = 0;
     }
@@ -3401,10 +3412,58 @@ function cloudFailHint() {
   return "не отправилось — проверь интернет";
 }
 
+/* Разбор 401/403 при живом токене: какое именно условие правил не сошлось. */
+async function diagnoseCloudWrite() {
+  if (diagnoseCloudWrite._ran) return;
+  diagnoseCloudWrite._ran = true;
+  if (!firebaseAuthEnabled() || !fbAuth.uid) return;
+  try {
+    const root = cloudRoot();
+    const probe = async (p) => {
+      const r = await fetch(await sharedUrlWithAuth(root + "/" + p), { headers: { Accept: "application/json" }, cache: "no-store" });
+      return { status: r.status, data: r.ok ? await r.json().catch(() => null) : null };
+    };
+    const users = await probe("weeqo-users.json");
+    if (users.status === 401 || users.status === 403) {
+      console.warn("weeqo-диагностика: чтение weeqo-users С ТОКЕНОМ отклонено (" + users.status + ") — значит правила реально не опубликованы. Realtime Database → Правила → вставь текст firebase-rules.json → Опубликовать.");
+      return;
+    }
+    const me = await probe("weeqo-users/" + fbAuth.uid + ".json");
+    const owner = await probe("weeqo-meta/owner.json");
+    if (!me.data) {
+      console.warn("weeqo-диагностика: правила опубликованы, но твоей регистрации нет (weeqo-users/" + fbAuth.uid + " пуст) — запись её не прошла. Ищи выше строку tg-roles с причиной и пришли скрин консоли.");
+    } else if (owner.data == null) {
+      console.warn("weeqo-диагностика: ты зарегистрирован (" + me.data + "), но место владельца пустое — перезагрузи страницу, приложение займёт его само.");
+    } else if (String(owner.data) !== String(me.data)) {
+      console.warn("weeqo-диагностика: владелец в базе = " + JSON.stringify(owner.data) + ", а твоя привязка = " + JSON.stringify(me.data) + ". Если это ошибка (например, узел создан руками) — удали weeqo-meta/owner в Firebase Console (Realtime Database → Данные) и перезагрузи страницу первым.");
+    } else {
+      console.warn("weeqo-диагностика: ты зарегистрирован и ты владелец (" + owner.data + "), а запись всё равно отклонена — опубликованные правила отличаются от firebase-rules.json. Сверь вкладку «Правила» посимвольно и пришли её скрин.");
+    }
+  } catch (e) {
+    /* диагностика не обязана срабатывать */
+  }
+}
+
+/* Приводим запись к виду, который пропускает .validate в правилах базы:
+   updatedAt — число не из будущего, строки — строками и в пределах лимитов. */
+function sanitizeSwapPayload(entry) {
+  const e = Object.assign({}, entry);
+  delete e.pendingSync;
+  if (typeof e.updatedAt !== "number" || !isFinite(e.updatedAt) || e.updatedAt > Date.now() + 60000)
+    e.updatedAt = Date.now();
+  ["subject", "teacher", "room", "by", "byName"].forEach((k) => {
+    if (e[k] != null && typeof e[k] !== "string") e[k] = String(e[k]);
+  });
+  if (typeof e.subject === "string") e.subject = e.subject.slice(0, 120);
+  if (typeof e.teacher === "string") e.teacher = e.teacher.slice(0, 120);
+  if (typeof e.room === "string") e.room = e.room.slice(0, 40);
+  return e;
+}
+
 /* Редактор/владелец: замена уходит сразу в опубликованные, по одной записи. */
 async function pushSwapEntry(key, entry) {
-  const payload = Object.assign({}, entry);
-  delete payload.pendingSync;
+  await waitTgRoles();
+  const payload = sanitizeSwapPayload(entry);
   if (tgSession) {
     payload.by = String(tgSession.id);
     payload.byName = tgDisplayName(tgSession);
@@ -3425,11 +3484,11 @@ async function pushSwapEntry(key, entry) {
 /* Обычный участник: замена уходит заявкой на проверку. */
 async function proposeSwapEntry(key, entry) {
   if (!tgSession) return false;
-  const payload = Object.assign({}, entry, {
+  await waitTgRoles();
+  const payload = sanitizeSwapPayload(Object.assign({}, entry, {
     by: String(tgSession.id),
     byName: tgDisplayName(tgSession),
-  });
-  delete payload.pendingSync;
+  }));
   const ok = await cloudWrite("weeqo-pending/" + encodeSwapKey(key), payload);
   if (!ok) toast(cloudFailHint());
   return ok;
