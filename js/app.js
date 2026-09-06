@@ -879,7 +879,7 @@ function renderTab() {
 function render(direction) {
   lastRenderAt = performance.now();
   // быстрые переключения больше не глушат анимацию: каждый день запускает каскад заново.
-  // при перемещении рулетки сцену уже меняет selectDate, здесь не дублируем
+  // при переме��ении рулетки сцену уже меняет selectDate, здесь не дублируем
   quietMotion = Boolean(scrub && scrub.active);
   renderHeader();
   renderStrip();
@@ -2001,7 +2001,7 @@ function openProfile() {
       </div>
       ${accountBlock}`;
 
-  backdrop.innerHTML = `<div class="weekly-profile${profileNotifsOpen || profileTgOpen ? " is-expanded" : ""}">`
+  backdrop.innerHTML = `<div class="weekly-profile${profileNotifsOpen || profileTgOpen ? " is-expanded" : ""}">
     <div class="weekly-profile-header">
       <button type="button" data-act="close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
