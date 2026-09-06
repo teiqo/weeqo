@@ -71,11 +71,24 @@ const systemTheme = () =>
     ? "light"
     : "dark";
 
+/* Режим производительности: data-perf на <html>, по CSS остаются только
+   прозрачностные анимации, тяжёлые blur/эффекты выключаются. */
+function applyPerfMode() {
+  if (state.perfMode) document.documentElement.setAttribute("data-perf", "1");
+  else document.documentElement.removeAttribute("data-perf");
+  const sw = $("#perf-switch");
+  if (sw) sw.setAttribute("aria-pressed", state.perfMode ? "true" : "false");
+  const hint = $("#perf-hint");
+  if (hint)
+    hint.textContent = state.perfMode ? "только прозрачность, без эффектов" : "все эффекты";
+}
+
 const state = {
   selected: defaultSelectedDate(),
   tab: "schedule",
   theme: systemTheme(),
   themeManual: false,
+  perfMode: false,
   palette: "default",
   accent: DEFAULT_ACCENT,
   windows: false,
@@ -1010,6 +1023,7 @@ function save() {
       JSON.stringify({
         theme: state.theme,
         themeManual: state.themeManual,
+        perfMode: state.perfMode,
         palette: state.palette,
         accent: state.accent,
         windows: state.windows,
@@ -1034,6 +1048,7 @@ function load() {
     /* Старые сохранения без флага — тема уже была выбрана вручную, не трогаем. */
     if (typeof data.themeManual === "boolean") state.themeManual = data.themeManual;
     else if (data.theme === "dark" || data.theme === "light") state.themeManual = true;
+    if (typeof data.perfMode === "boolean") state.perfMode = data.perfMode;
     if (PALETTES.includes(data.palette)) state.palette = data.palette;
     if (typeof data.accent === "string" && /^#[0-9a-f]{6}$/i.test(data.accent)) {
       state.accent = data.accent;
@@ -1537,7 +1552,7 @@ function bindStrip() {
 
   strip.addEventListener("pointerup", release);
   strip.addEventListener("pointercancel", () => {
-    /* Если браузер отобрал жест п��среди ведения — доводим выбор до конца,
+    /* Если браузер отобрал жест посреди ведения — доводим выбор до конца,
        а не сбрасываем его назад. */
     if (scrub && scrub.active) settleScrub();
     else endScrub();
@@ -1622,6 +1637,15 @@ function bindEvents() {
     save();
   });
 
+  const perfSwitch = $("#perf-switch");
+  if (perfSwitch)
+    perfSwitch.addEventListener("click", () => {
+      state.perfMode = !state.perfMode;
+      applyPerfMode();
+      save();
+      toast(state.perfMode ? "режим производительности включён" : "режим производительности выключен");
+    });
+
   const modes = $("#theme-modes");
   if (modes) {
     modes.addEventListener("click", (e) => {
@@ -1686,7 +1710,7 @@ function bindEvents() {
   });
 
   /* Свайп по дням: палец тянет сцену за собой, а день меняется уже на
-     отпускании ��� с обычной анимацией листания. Раньше день переключался
+     отпускании — с обычной анимацией листания. Раньше день переключался
      прямо посреди жеста, и анимацию съедал активный скролл. */
   const scene = $("#scene");
   const swipeStage = $("#stage");
@@ -1862,18 +1886,68 @@ function dotsHtml(d) {
 function futureDaysHtml() {
   if (state.scope !== "week") return "";
   const ws = weekStart(state.selected);
-  const out = [];
+  const days = [];
   for (let i = 0; i < 6; i += 1) {
     const d = addDays(ws, i);
     if (d <= state.selected) continue;
-    out.push(dayHtml(d, false, true));
+    days.push(d);
   }
   /* На субботе неделя заканчивается — показываем понедельник следующей. */
-  if (!out.length) out.push(dayHtml(addDays(ws, 7), false, true));
+  if (!days.length) days.push(addDays(ws, 7));
+  /* На телефоне рендерим сразу только ближайший день — остальные дорисовываются
+     по мере прокрутки: не делаем работу, которую пользователь не видит. */
+  const lazy =
+    typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(max-width: 740px)").matches;
+  const out = days.map((d, i) =>
+    lazy && i > 0
+      ? '<div class="weekly-lazy-day" data-lazy="' + iso(d) + '" aria-hidden="true"></div>'
+      : dayHtml(d, false, true)
+  );
   /* Обёртка нужна, чтобы будущие дни проявлялись каскадом,
      а не возникали резко вместе со сменой сцены. */
   return `<div class="weekly-future-days">${out.join("")}</div>`;
 }
+
+/* Ленивая дорисовка будущих дней: плейсхолдер заменяется настоящим блоком дня. */
+var lazyDayObserver = null;
+function setupLazyDays() {
+  const targets = document.querySelectorAll(".weekly-lazy-day[data-lazy]");
+  if (lazyDayObserver) {
+    lazyDayObserver.disconnect();
+    lazyDayObserver = null;
+  }
+  if (!targets.length) return;
+  const fill = (el) => {
+    const dIso = el.dataset.lazy;
+    if (!dIso) return;
+    el.outerHTML = dayHtml(dateFromIso(dIso), false, true);
+  };
+  if (typeof IntersectionObserver === "undefined") {
+    targets.forEach(fill);
+    return;
+  }
+  lazyDayObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((en) => {
+        if (!en.isIntersecting) return;
+        lazyDayObserver.unobserve(en.target);
+        fill(en.target);
+      });
+    },
+    { rootMargin: "500px 0px" }
+  );
+  targets.forEach((el) => lazyDayObserver.observe(el));
+}
+
+/* Сцена перерисовывается при смене дня/недели — после каждой перерисовки
+   вешаем наблюдателя на свежие плейсхолдеры. */
+(function watchLazyDays() {
+  const stage = document.getElementById("stage");
+  if (!stage || typeof MutationObserver === "undefined") return;
+  new MutationObserver(() => setupLazyDays()).observe(stage, { childList: true, subtree: true });
+})();
 
 const ICON_CHECK =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 13l4 4 10-10"/></svg>';
@@ -1916,20 +1990,29 @@ function profileHeaderTitleHtml() {
   return "профиль";
 }
 
-/* Синхронизирует шапку шторки с раскрытым разделом без полного перерендера:
-   заголовок, is-expanded, поведение «назад» и скрытие строк-заголовков разделов. */
+/* Синхронизирует шапку шторки с раскрытым разделом без полного перерендера.
+   Заголовок меняется мягким кроссфейдом, строки разделов схлопываются через CSS. */
 function syncProfileHeader(sheet) {
   if (!sheet) return;
   const expanded = profileNotifsOpen || profileTgOpen;
   sheet.classList.toggle("is-expanded", expanded);
   const h1 = sheet.querySelector(".weekly-profile-header h1");
-  if (h1) h1.innerHTML = profileHeaderTitleHtml();
+  if (h1) {
+    const next = profileHeaderTitleHtml();
+    /* Запоминаем, что реально на экране, — меняем только по факту смены. */
+    if (h1._weeqoTitle === undefined) h1._weeqoTitle = h1.innerHTML;
+    if (h1._weeqoTitle !== next) {
+      h1._weeqoTitle = next;
+      window.clearTimeout(h1._weeqoSwapTimer);
+      h1.classList.add("is-swapping");
+      h1._weeqoSwapTimer = window.setTimeout(() => {
+        h1.innerHTML = next;
+        h1.classList.remove("is-swapping");
+      }, 130);
+    }
+  }
   const backBtn = sheet.querySelector(".weekly-profile-header button");
   if (backBtn) backBtn.dataset.act = expanded ? "profile-back" : "close";
-  /* Строки прячем инлайн — сработает даже со старым CSS из кэша. */
-  sheet.querySelectorAll(".weekly-profile-notifs-head").forEach((head) => {
-    head.style.display = expanded ? "none" : "";
-  });
 }
 
 function openProfile() {
@@ -2076,8 +2159,6 @@ function openProfile() {
     renderTgSheetBody();
     if (canReview) pullPending();
   }
-  /* На случай переоткрытия с раскрытым разделом — строки прячем и здесь. */
-  syncProfileHeader(backdrop.querySelector(".weekly-profile"));
 }
 
 function closeProfile() {
@@ -2323,14 +2404,12 @@ function hideLoader() {
 function playBrandIntro() {
   const brand = $("#brand");
   if (!brand) return;
-  brand.classList.remove("is-playing", "is-done");
+  brand.classList.remove("is-playing", "is-word-out");
   void brand.offsetWidth; /* перезапуск CSS-анимации */
   brand.classList.add("is-playing");
-  window.setTimeout(() => {
-    brand.classList.remove("is-playing");
-    /* Слово и сдвинутый знак остаются видимыми после интро. */
-    brand.classList.add("is-done");
-  }, 4200);
+  /* Слово показывается и уходит обратно, знак доворачивает свою анимацию. */
+  window.setTimeout(() => brand.classList.add("is-word-out"), 2400);
+  window.setTimeout(() => brand.classList.remove("is-playing", "is-word-out"), 4200);
 }
 
 function init() {
@@ -2352,6 +2431,7 @@ function init() {
   })();
   applyQuery();
   applyTheme();
+  applyPerfMode();
 
   $("#windows-switch").setAttribute("aria-pressed", state.windows ? "true" : "false");
 
@@ -3369,7 +3449,7 @@ function swapPrimaryLabel() {
   const role = myRole();
   if (role === "owner" || role === "editor") return "опубликовать";
   if (role === "user") return "предложить";
-  return "сохранить у ��ебя";
+  return "сохранить у себя";
 }
 
 function swapAccessHint() {
@@ -3696,7 +3776,7 @@ async function rejectPending(enc) {
 async function grantEditor(tgId, name) {
   const ok = await cloudWrite("weeqo-editors/" + tgId, name || "редактор");
   if (!ok) {
-    toast("не получилось выда��ь доступ");
+    toast("не получилось выдать доступ");
     return;
   }
   toast("редактор добавлен");
@@ -3878,6 +3958,18 @@ function pendingRowHtml(enc, entry, role) {
     if (parts.length) what = parts.join(" · ");
   }
   const who = entry.byName || "без имени";
+  /* Сегмент пары без времени: предмет, преподаватель · кабинет, «N пара · 1 ч 35 мин». */
+  const frag = m ? buildNotifFrag(key, entry) : null;
+  const dur = frag ? lessonDurationLabel(frag.d, frag.n) : "";
+  const segHtml = frag
+    ? '<div class="weekly-pending-segment">' +
+      "<strong>" + escapeHtml(frag.subject || frag.n + " пара") + "</strong>" +
+      ([frag.teacher, frag.room].filter(Boolean).length
+        ? "<span>" + escapeHtml([frag.teacher, frag.room].filter(Boolean).join(" · ")) + "</span>"
+        : "") +
+      "<small>" + escapeHtml(frag.n + " пара" + (dur ? " · " + dur : "")) + "</small>" +
+      "</div>"
+    : "";
   let actions =
     '<button class="is-primary" type="button" data-tg="approve" data-key="' + escapeHtml(enc) + '">принять</button>' +
     '<button type="button" data-tg="reject" data-key="' + escapeHtml(enc) + '">отклонить</button>';
@@ -3887,9 +3979,10 @@ function pendingRowHtml(enc, entry, role) {
       escapeHtml(String(entry.by)) + '">+ редактор</button>';
   }
   return (
-    '<div class="weekly-tg-row"><div class="weekly-tg-row-text"><strong>' + escapeHtml(what) + "</strong><span>" +
-    escapeHtml(when) + " · предложил(а): " + escapeHtml(who) +
-    '</span></div><div class="weekly-tg-row-actions">' + actions + "</div></div>"
+    '<div class="weekly-tg-row"><div class="weekly-tg-row-text"><strong>' + escapeHtml(what) + "</strong>" +
+    segHtml +
+    "<span>" + escapeHtml(when) + " · предложил(а): " + escapeHtml(who) + "</span>" +
+    '</div><div class="weekly-tg-row-actions">' + actions + "</div></div>"
   );
 }
 
@@ -3925,7 +4018,7 @@ function tgSheetBodyHtml(inline) {
     ids.forEach((tg) => {
       html +=
         '<div class="weekly-tg-row"><div class="weekly-tg-row-text"><strong>' + escapeHtml(String(tgRoles.editors[tg])) +
-        '</strong></div><div class="weekly-tg-row-actions"><button type="button" data-tg="revoke" data-tgid="' +
+        '</strong><span>id: ' + escapeHtml(String(tg)) + '</span></div><div class="weekly-tg-row-actions"><button type="button" data-tg="revoke" data-tgid="' +
         escapeHtml(tg) + '">убрать</button></div></div>';
     });
     html +=
@@ -4301,7 +4394,7 @@ var NOTIF_ICONS = {
   schedule: ICON_BELL,
 };
 
-/* Структурированный фрагмент дня для карточки уведомления.
+/* Структурированный фрагмент дня для карточки уведомления/заявки.
    У отмены/сброса в облаке нет полей пары — берём её из базового расписания. */
 function buildNotifFrag(key, entry) {
   const m = key.match(/\|(\d{4}-\d{2}-\d{2}):(\d+)$/);
@@ -4330,6 +4423,21 @@ function buildNotifFrag(key, entry) {
     cancelled: !!entry.cancelled,
     deleted: !!entry.deleted,
   };
+}
+
+/* Длительность пары из расписания звонков: «1 ч 35 мин». Без времени начала/конца. */
+function lessonDurationLabel(dIso, n) {
+  const d = dateFromIso(dIso);
+  const bell = BELLS.find((b) => b.n === Number(n));
+  if (!d || Number.isNaN(d.getTime()) || !bell) return "";
+  const t = d.getDay() === 6 ? bell.sat : bell.week;
+  const m = String(t).match(/(\d{1,2}):(\d{2})\D+(\d{1,2}):(\d{2})/);
+  if (!m) return "";
+  const mins = Number(m[3]) * 60 + Number(m[4]) - (Number(m[1]) * 60 + Number(m[2]));
+  if (mins <= 0) return "";
+  const h = Math.floor(mins / 60);
+  const mm = mins % 60;
+  return h ? h + " ч" + (mm ? " " + mm + " мин" : "") : mm + " мин";
 }
 
 /* Мини-карточка дня в уведомлении: дата, время и сама пара —
@@ -4574,7 +4682,7 @@ function manualRefresh(btn) {
     bugBtn.addEventListener("click", () => {
       /* Диагностика сразу в буфере — человеку остаётся вставить её в сообщение. */
       const info = [
-        "weeqo v64 (sw v69)",
+        "weeqo v65 (sw v70)",
         "группа: " + groupName(),
         "тема: " + state.theme,
         "UA: " + (navigator.userAgent || "?"),

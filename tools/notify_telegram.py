@@ -88,8 +88,7 @@ def fb_get(root, path, token):
 
 
 def tg_send(chat_id, text):
-    """Возвращает \"ok\" | \"forbidden\" | \"error\".
-    403 — человек не нажимал /start (бот не может написать первым)."""
+    """Возвращает ok / forbidden / error. 403 — человек не нажимал /start."""
     url = "https://api.telegram.org/bot%s/sendMessage" % BOT_TOKEN
     try:
         http_json(url, {"chat_id": chat_id, "text": text})
@@ -100,7 +99,6 @@ def tg_send(chat_id, text):
     except Exception as e:
         log("tg ->", chat_id, e)
         return "error"
-
 
 
 def load_state():

@@ -175,7 +175,7 @@
 /* на поднятом прямоугольнике используем контрастный цвет */
 /* Пока держишь/ведёшь, цифра под пилюлей должна оставаться контрастной, а не
    сливаться с её цветом. Раньше при долгом зажатии (скрабинг без движения)
-   выбранный день ещё не помечен data-under-selection и уход��л в idle-цвет,
+   выбранный день ещё не помечен data-under-selection и уходил в idle-цвет,
    совпадающий с заливкой, — цифра пропадала. */
 :root .date-strip.is-pressing button[data-date-index].is-selected:not(.is-day-off),
 :root .date-strip:is(.is-scrubbing, .is-settling) button[data-date-index][data-under-selection="true"]:not(.is-day-off),
@@ -938,7 +938,7 @@ html.weekly-page #root::-webkit-scrollbar,
   --week-odd-color: #d85b33; --week-even-color: #6758bd; color-scheme: light;
 }
 
-/* Конфетная: розовый, голуб��й, сиреневый и мята. */
+/* Конфетная: розовый, голубой, сиреневый и мята. */
 :root[data-theme="dark"][data-weekly-palette="candy"] {
   --weekly-bg: #1a101d; --weekly-surface: #291a2e; --weekly-raised: #37223e;
   --weekly-text: #fff0fa; --weekly-secondary: #c4a3c3; --weekly-tertiary: #a789a8;
@@ -1172,7 +1172,7 @@ html.weekly-page #root::-webkit-scrollbar,
 :root[data-weekly-palette] .weekly-palette-toggle i:nth-child(3) { background: var(--palette-accent-3) !important; }
 :root[data-weekly-palette] .weekly-palette-toggle i:nth-child(4) { background: var(--palette-accent-4) !important; }
 
-/* Текст и карточки во всех палитрах повторяют ба��овый формат. */
+/* Текст и карточки во всех палитрах повторяют базовый формат. */
 :root[data-weekly-palette] .agenda-list {
   overflow: hidden;
   border: 1px solid var(--weekly-separator);
@@ -1924,7 +1924,7 @@ html.weekly-page #root::-webkit-scrollbar,
   color: #6e6e76;
 }
 
-/* ===== акцентная ��ема: фон, подложки и логотип идут от выбранного цвета ===== */
+/* ===== акцентная тема: фон, подложки и логотип идут от выбранного цвета ===== */
 :root[data-weekly-palette="accent"] {
   --weekly-bg: color-mix(in srgb, var(--weekly-accent, #0a84ff) 26%, #05050a);
   --weekly-surface: color-mix(in srgb, var(--weekly-accent, #0a84ff) 30%, #101015);
@@ -2991,6 +2991,7 @@ a.weekly-settings-row.weekly-settings-link strong {
   display: none;
 }
 
+
 /* --- заголовок шторки профиля с иконкой раскрытого раздела --- */
 .weekly-profile-header h1 {
   display: flex;
@@ -2998,6 +2999,11 @@ a.weekly-settings-row.weekly-settings-link strong {
   justify-content: center;
   gap: 8px;
   min-width: 0;
+  transition: opacity 0.13s ease, transform 0.13s ease;
+}
+.weekly-profile-header h1.is-swapping {
+  opacity: 0;
+  transform: translateY(3px);
 }
 .weekly-profile-title-icon {
   display: grid;
@@ -3045,48 +3051,6 @@ a.weekly-settings-row.weekly-settings-link strong {
 .weekly-notif-row.is-pending .weekly-notif-ico { background: linear-gradient(180deg, #ffcb55, #ff9500); }
 .weekly-notif-row.is-schedule .weekly-notif-ico { background: linear-gradient(180deg, #5ae87e, #28b957); }
 .weekly-notif-row.is-cancel .weekly-tg-row-text > strong { color: var(--weekly-danger); }
-
-/* --- раскрытый раздел профиля: строка-заголовок дублирует шапку ---
-       прячем её, чтобы список раздела начинался сразу сверху --- */
-.weekly-profile.is-expanded .weekly-profile-notifs-head {
-  display: none;
-}
-
-/* --- логотип: после интро-анимации слово и сдвинутый знак остаются видимыми --- */
-.weekly-header-brand.is-done .weekly-header-mark {
-  transform: translate3d(calc(-50% + var(--weekly-brand-shift)), 0, 0);
-}
-.weekly-header-brand.is-done .weekly-header-word {
-  opacity: 1;
-  clip-path: inset(0 0 0 0);
-  transform: translate3d(0, -50%, 0);
-}
-
-/* --- iOS (WebKit): облегчаем тяжёлые blur-эффекты, чтобы не лагала прокрутка ---
-       Десктоп не затронут: блок применяется только на iOS Safari/WebKit. --- */
-@supports (-webkit-touch-callout: none) {
-  .weekly-date-controls {
-    backdrop-filter: blur(8px) saturate(140%);
-    -webkit-backdrop-filter: blur(8px) saturate(140%);
-  }
-  .weekly-dock:before {
-    backdrop-filter: blur(8px) saturate(1.05);
-    -webkit-backdrop-filter: blur(8px) saturate(1.05);
-  }
-  .live-card-glass {
-    backdrop-filter: blur(10px) saturate(120%);
-    -webkit-backdrop-filter: blur(10px) saturate(120%);
-  }
-  .weekly-days-scene.is-date-scrubbing .weekly-active-day-stage,
-  .weekly-days-scene.is-date-settling .weekly-active-day-stage {
-    filter: none;
-  }
-}
-
-/* --- иконка «сообщить об ошибке» --- */
-.weekly-settings-icon.is-bug {
-  background: linear-gradient(180deg, #ff9f8a, #e04a3a);
-}
 
 /* --- мини-карточка дня в уведомлении --- */
 .weekly-notif-frag {
@@ -3138,4 +3102,145 @@ a.weekly-settings-row.weekly-settings-link strong {
 .weekly-notif-row.is-cancel .weekly-notif-frag-lesson b {
   color: var(--weekly-danger);
   text-decoration: line-through;
+}
+
+/* --- сегмент пары в заявке (без времени) --- */
+.weekly-pending-segment {
+  display: block;
+  margin-top: 7px;
+  padding: 8px 10px;
+  border: 1px solid var(--weekly-separator);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--weekly-surface) 70%, transparent);
+}
+.weekly-pending-segment strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.weekly-pending-segment span {
+  display: block;
+  margin-top: 2px;
+  color: var(--weekly-secondary);
+  font-size: 12px;
+}
+.weekly-pending-segment small {
+  display: block;
+  margin-top: 3px;
+  color: var(--weekly-tertiary);
+  font-size: 11px;
+}
+
+/* --- плавное раскрытие разделов профиля без мерцаний --- */
+.weekly-profile .weekly-profile-notifs-head {
+  overflow: hidden;
+  max-height: 72px;
+  opacity: 1;
+  transition: max-height 0.26s ease, opacity 0.2s ease, padding 0.26s ease;
+}
+.weekly-profile.is-expanded .weekly-profile-notifs-head {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border: 0;
+  pointer-events: none;
+}
+
+/* --- раскрытый раздел на телефоне — карточка по центру со скруглением, как на ПК --- */
+@media (max-width: 740px) {
+  .weekly-profile-backdrop:has(.weekly-profile.is-expanded) {
+    padding: 18px;
+    place-items: center;
+  }
+  .weekly-profile.is-expanded {
+    width: min(100%, 500px);
+    height: auto;
+    min-height: 0;
+    max-height: calc(var(--weekly-viewport-height, 100dvh) - 36px);
+    border: 1px solid color-mix(in srgb, var(--weekly-separator) 82%, transparent);
+    border-radius: 28px;
+    box-shadow: 0 28px 80px #0000003d;
+    transition: border-radius 0.26s ease, max-height 0.26s ease;
+  }
+}
+
+/* --- логотип: слово показывается на интро и уходит обратно.
+       Переходы вместо кейфреймов — на iOS надёжнее (там кейфрейм слова не играл). --- */
+.weekly-header-word {
+  transition: opacity 0.3s ease, transform 0.45s cubic-bezier(0.22, 0.72, 0.16, 1),
+    clip-path 0.45s cubic-bezier(0.22, 0.72, 0.16, 1);
+}
+.weekly-header-brand.is-playing .weekly-header-word {
+  animation: none;
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+  transform: translate3d(0, -50%, 0);
+}
+.weekly-header-brand.is-word-out .weekly-header-word {
+  opacity: 0;
+  clip-path: inset(0 100% 0 0);
+  transform: translate3d(-8px, -50%, 0);
+}
+
+/* --- ленивый день-плейсхолдер (дорисовывается при прокрутке) --- */
+.weekly-lazy-day {
+  min-height: 240px;
+}
+
+/* --- иконки «сообщить об ошибке» и режима производительности --- */
+.weekly-settings-icon.is-bug {
+  background: linear-gradient(180deg, #ff9f8a, #e04a3a);
+}
+.weekly-settings-icon.is-perf {
+  background: linear-gradient(180deg, #ffd76a, #f0a020);
+}
+
+/* --- iOS (WebKit): облегчаем тяжёлые blur-эффекты, чтобы не лагала прокрутка --- */
+@supports (-webkit-touch-callout: none) {
+  .weekly-date-controls {
+    backdrop-filter: blur(8px) saturate(140%);
+    -webkit-backdrop-filter: blur(8px) saturate(140%);
+  }
+  .weekly-dock:before {
+    backdrop-filter: blur(8px) saturate(1.05);
+    -webkit-backdrop-filter: blur(8px) saturate(1.05);
+  }
+  .live-card-glass {
+    backdrop-filter: blur(10px) saturate(120%);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+  }
+  .weekly-days-scene.is-date-scrubbing .weekly-active-day-stage,
+  .weekly-days-scene.is-date-settling .weekly-active-day-stage {
+    filter: none;
+  }
+}
+
+/* --- режим производительности: из анимаций только прозрачность --- */
+:root[data-perf] * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-property: opacity !important;
+  transition-duration: 0.16s ease !important;
+}
+:root[data-perf] .weekly-date-controls,
+:root[data-perf] .weekly-settings-popover,
+:root[data-perf] .weekly-tab-bar,
+:root[data-perf] .weekly-dock-refresh,
+:root[data-perf] .live-card-glass,
+:root[data-perf] .weekly-profile-backdrop {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+:root[data-perf] .weekly-date-controls {
+  background: var(--weekly-bg);
+}
+:root[data-perf] .weekly-dock:before,
+:root[data-perf] .live-card-particles,
+:root[data-perf] .live-card-backglow {
+  display: none !important;
+}
+:root[data-perf] .weekly-days-scene.is-date-scrubbing .weekly-active-day-stage,
+:root[data-perf] .weekly-days-scene.is-date-settling .weekly-active-day-stage {
+  filter: none !important;
 }
